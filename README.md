@@ -1,5 +1,7 @@
 # agentwatch
 
+中文 | [English](README.en.md)
+
 本工程所有 Claude Code 与 Codex 会话的实时 3D 看板，一个会话一个房间。Go 标准库扫描两处日志，每秒经 SSE 推送快照；前端是无构建的 Three.js 温馨低多边形等距办公室，Codex 房间的名牌与侧栏会标出 `Codex`。
 
 - Claude Code：`~/.claude/sessions/*.json` 注册表与 `~/.claude/projects/<编码路径>` 下的会话、子 agent jsonl。
