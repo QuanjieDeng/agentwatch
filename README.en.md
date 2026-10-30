@@ -26,19 +26,21 @@ Flags: `-project` defaults to the current directory, `-port` to 7788, `-stuck` t
 
 ## Install as a plugin
 
-This directory is also a plugin marketplace for both Claude Code and Codex; the plugin lives in `plugins/agentwatch/`. Once installed, tell the agent "open agentwatch" (or use `/agentwatch` in Claude Code) and it runs `plugins/agentwatch/scripts/ensure-server.sh` in the current project directory: it reuses a server already on the port, otherwise starts one in the background (log at `log/agentwatch.log`) and prints the URL.
+This repo is also a plugin marketplace for both Claude Code and Codex; the plugin lives in `plugins/agentwatch/`. Once installed, tell the agent "open agentwatch" (or use `/agentwatch` in Claude Code) and it runs `plugins/agentwatch/scripts/ensure-server.sh` in the current project directory: it reuses a server already on the port, otherwise starts one in the background (log at `log/agentwatch.log`) and prints the URL.
 
 ```bash
 # Claude Code
-claude plugin marketplace add ~/tools/agentwatch
+claude plugin marketplace add QuanjieDeng/agentwatch
 claude plugin install agentwatch@agentwatch
 
 # Codex
-codex plugin marketplace add ~/tools/agentwatch
+codex plugin marketplace add QuanjieDeng/agentwatch
 codex plugin add agentwatch@agentwatch
 ```
 
-The script reads `AGENTWATCH_PORT` (default 7788) and `AGENTWATCH_HOME` (set it when the source is not at `~/tools/agentwatch`). The plugin ships no hooks.
+On first run, if the source is not on the machine yet, the script shallow-clones this repo to `~/tools/agentwatch` (set `AGENTWATCH_HOME` to change that), so `go`, `git` and `curl` must be on PATH. Update the source later with `git -C ~/tools/agentwatch pull`. To install a local dev checkout, pass `~/tools/agentwatch` as the marketplace instead.
+
+The script reads `AGENTWATCH_PORT` (default 7788) and `AGENTWATCH_HOME` (source location). The plugin ships no hooks.
 
 ## States and animation
 

@@ -6,13 +6,15 @@
 
 ```sh
 # Claude Code
-claude plugin marketplace add ~/tools/agentwatch
+claude plugin marketplace add QuanjieDeng/agentwatch
 claude plugin install agentwatch@agentwatch
 
 # Codex
-codex plugin marketplace add ~/tools/agentwatch
+codex plugin marketplace add QuanjieDeng/agentwatch
 codex plugin add agentwatch@agentwatch
 ```
+
+首次运行时本机还没有源码，脚本会自动浅克隆仓库到 `~/tools/agentwatch`。
 
 ## 包含什么
 
@@ -24,8 +26,8 @@ codex plugin add agentwatch@agentwatch
 
 ## 依赖
 
-- agentwatch 源码目录，默认 `~/tools/agentwatch`，其他位置用 `AGENTWATCH_HOME` 指定。
-- PATH 里有 `go` 与 `curl`。
+- agentwatch 源码目录：首次运行自动克隆到 `~/tools/agentwatch`，其他位置用 `AGENTWATCH_HOME` 指定。
+- PATH 里有 `go`、`git` 与 `curl`。
 
 ## 环境变量
 

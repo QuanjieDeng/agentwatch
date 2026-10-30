@@ -26,19 +26,21 @@ cd ~/tools/agentwatch && go run . -demo -port 7799
 
 ## 作为插件安装
 
-本目录同时是 Claude Code 与 Codex 的插件 marketplace，插件在 `plugins/agentwatch/`。装好后对 agent 说「打开 agentwatch」，或在 Claude Code 里用 `/agentwatch`，它会在当前项目目录运行 `plugins/agentwatch/scripts/ensure-server.sh`：端口上已有服务就复用，否则后台起服务（日志 `log/agentwatch.log`），最后给出 URL。
+本仓库同时是 Claude Code 与 Codex 的插件 marketplace，插件在 `plugins/agentwatch/`。装好后对 agent 说「打开 agentwatch」，或在 Claude Code 里用 `/agentwatch`，它会在当前项目目录运行 `plugins/agentwatch/scripts/ensure-server.sh`：端口上已有服务就复用，否则后台起服务（日志 `log/agentwatch.log`），最后给出 URL。
 
 ```bash
 # Claude Code
-claude plugin marketplace add ~/tools/agentwatch
+claude plugin marketplace add QuanjieDeng/agentwatch
 claude plugin install agentwatch@agentwatch
 
 # Codex
-codex plugin marketplace add ~/tools/agentwatch
+codex plugin marketplace add QuanjieDeng/agentwatch
 codex plugin add agentwatch@agentwatch
 ```
 
-脚本读 `AGENTWATCH_PORT`（默认 7788）与 `AGENTWATCH_HOME`（源码不在 `~/tools/agentwatch` 时指定）。插件不带 hook。
+首次运行时本机还没有源码，脚本会自动浅克隆本仓库到 `~/tools/agentwatch`（要换位置就设 `AGENTWATCH_HOME`），所以 PATH 里需要 `go`、`git` 与 `curl`。之后更新源码用 `git -C ~/tools/agentwatch pull`。本地开发想直接装当前目录，把上面的仓库换成 `~/tools/agentwatch` 即可。
+
+脚本读 `AGENTWATCH_PORT`（默认 7788）与 `AGENTWATCH_HOME`（源码位置）。插件不带 hook。
 
 ## 状态与动画
 

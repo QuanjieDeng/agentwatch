@@ -15,13 +15,25 @@ fi
 
 project=$PWD
 script_dir=$(cd "$(dirname "$0")" && pwd)
-# 从源码目录直接运行时上三级就是工具根；装进插件缓存后不是，只能回落到约定位置。
+# 从源码目录直接运行时上三级就是工具根；装进插件缓存后不是，用默认位置（首次运行从 GitHub 浅克隆）。
 if [ -n "${AGENTWATCH_HOME:-}" ]; then
 	home=$AGENTWATCH_HOME
 elif [ -f "$script_dir/../../../go.mod" ]; then
 	home=$(cd "$script_dir/../../.." && pwd)
 else
 	home=$HOME/tools/agentwatch
+	if [ ! -f "$home/go.mod" ]; then
+		if ! command -v git >/dev/null 2>&1; then
+			echo "agentwatch：$home 下没有源码，PATH 里也没有 git，无法自动下载；请设置 AGENTWATCH_HOME" >&2
+			exit 1
+		fi
+		mkdir -p "$(dirname "$home")"
+		echo "agentwatch：首次运行，正在下载源码到 $home" >&2
+		if ! git clone --depth 1 https://github.com/QuanjieDeng/agentwatch.git "$home" >&2; then
+			echo "agentwatch：下载失败，请手动克隆 https://github.com/QuanjieDeng/agentwatch 到 $home，或设置 AGENTWATCH_HOME" >&2
+			exit 1
+		fi
+	fi
 fi
 if [ ! -f "$home/go.mod" ]; then
 	echo "agentwatch：找不到工具目录（$home 下没有 go.mod），请设置 AGENTWATCH_HOME 指向 agentwatch 源码目录" >&2
