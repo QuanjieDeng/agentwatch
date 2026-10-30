@@ -5,3 +5,4 @@
 # 个人配置与本地工作记录
 /aliases.json
 /.audit/
+/.claude/settings.local.json
