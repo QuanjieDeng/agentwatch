@@ -2,6 +2,8 @@
 
 [中文](README.md) | English
 
+![agentwatch dashboard](screenshot.png)
+
 A live 3D dashboard of every Claude Code and Codex session in this project — one session per room. A Go standard-library scanner tails two log sources and pushes a snapshot over SSE every second; the frontend is a build-free Three.js cozy low-poly isometric office. Codex rooms are labeled `Codex` on the nameplate and in the sidebar.
 
 - Claude Code: the session registry at `~/.claude/sessions/*.json` plus session and sub-agent jsonl under `~/.claude/projects/<encoded-path>`.
