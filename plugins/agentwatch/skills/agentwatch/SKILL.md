@@ -9,6 +9,7 @@ description: 打开 agentwatch 实时 3D 看板，查看当前项目的 Claude C
 
 1. 脚本位于本 skill 所在插件的根目录下的 `scripts/ensure-server.sh`，插件根目录就是本 SKILL.md 的上两级目录。找不到时用兜底路径 `$HOME/tools/agentwatch/plugins/agentwatch/scripts/ensure-server.sh`。
 2. 在用户的项目目录里执行 `sh <脚本路径>`，不要先 cd 到别处：脚本用调用时的当前目录决定看哪个项目。
+   界面语言是 `${user_config.language}`：只有它是 `zh` 或 `en` 时，才作为第一个参数传给脚本（例如 `sh <脚本路径> en`）；原样占位符或其它值一律不传。
 3. 脚本成功时最后一行是看板 URL，原样告诉用户，让用户在浏览器打开。已有服务在跑时脚本会直接复用，这是正常结果。
 4. 脚本退出码非 0 时，把它的 stderr 原样转述给用户，不要自行重试或改端口。
 

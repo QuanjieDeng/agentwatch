@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { tr } from './i18n.js';
 
 const PALETTE = ['#8ec5e8', '#f4a7b9', '#a8d8b9', '#c9b6e4', '#f7c59f', '#9fd8d3', '#e8c99a', '#b5c8f0', '#f0b5d1', '#c4dca0'];
 const FOREMAN = '#e9894f';
@@ -23,7 +24,7 @@ export async function loadRobot(url) {
   gltf.scene.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(gltf.scene);
   const h = box.max.y - box.min.y;
-  if (!(h > 0)) throw new Error('角色模型包围盒为空');
+  if (!(h > 0)) throw new Error(tr('emptyModel'));
   tpl = { scene: gltf.scene, clips: gltf.animations, scale: HEIGHT / h, foot: -box.min.y };
 }
 export const robotReady = () => tpl !== null;
@@ -37,9 +38,9 @@ export function hashStr(s) {
 export function fmtDur(ms) {
   if (!(ms >= 0)) return '—';
   const s = Math.floor(ms / 1000);
-  if (s < 60) return `${s}秒`;
-  if (s < 3600) return `${Math.floor(s / 60)}分${s % 60}秒`;
-  return `${Math.floor(s / 3600)}时${Math.floor(s / 60) % 60}分`;
+  if (s < 60) return tr('sec', s);
+  if (s < 3600) return tr('minSec', Math.floor(s / 60), s % 60);
+  return tr('hourMin', Math.floor(s / 3600), Math.floor(s / 60) % 60);
 }
 
 const trunc = (s, n) => (s.length > n ? s.slice(0, n) + '…' : s);
@@ -49,11 +50,11 @@ export const shortName = a => trunc(a.description || a.type || a.id, 18);
 export function actionText(a, now) {
   switch (a.state) {
     case 'tool': return trunc(`${a.tool} ${a.detail}`.trim(), 48);
-    case 'processing': return `${a.tool || '工具'} 已返回，等待回应`;
-    case 'thinking': return '思考中…';
-    case 'stuck': return `卡住 ${fmtDur(now - a.lastEventAt)}`;
-    case 'done': return '已结束';
-    default: return '呼呼大睡…';
+    case 'processing': return tr('toolReturned', a.tool || tr('toolFallback'));
+    case 'thinking': return tr('thinking');
+    case 'stuck': return tr('stuckFor', fmtDur(now - a.lastEventAt));
+    case 'done': return tr('finished');
+    default: return tr('sleeping');
   }
 }
 

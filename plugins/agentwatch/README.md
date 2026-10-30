@@ -5,14 +5,16 @@
 ## 安装
 
 ```sh
-# Claude Code
+# Claude Code：安装范围 user（默认）/ project / local，界面语言 zh / en
 claude plugin marketplace add QuanjieDeng/agentwatch
-claude plugin install agentwatch@agentwatch
+claude plugin install agentwatch@agentwatch --scope project --config language=zh
 
 # Codex
 codex plugin marketplace add QuanjieDeng/agentwatch
 codex plugin add agentwatch@agentwatch
 ```
+
+在 Claude Code 的 `/plugin` 里交互式安装时，会直接询问安装范围和界面语言。语言之后可用 `claude plugin configure agentwatch` 修改，重新运行 `/agentwatch` 生效。
 
 首次运行时本机还没有源码，脚本会自动浅克隆仓库到 `~/tools/agentwatch`。
 
@@ -33,6 +35,7 @@ codex plugin add agentwatch@agentwatch
 
 - `AGENTWATCH_PORT`：端口，默认 7788。
 - `AGENTWATCH_HOME`：agentwatch 源码目录。
+- `AGENTWATCH_LANG`：界面语言 `zh` / `en`，命令行第一个参数或插件选项优先。
 
 ## 数据
 

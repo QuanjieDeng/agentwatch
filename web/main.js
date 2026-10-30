@@ -1,11 +1,13 @@
 import { createStage, RoomView, Flyers, roomSlot, roomsBox } from './scene.js';
 import { Actor, loadRobot, robotReady, shortName, actionText, fmtDur } from './agents.js';
+import { initLang, tr, locale, fmtNum } from './i18n.js';
+
+initLang();
 
 const $ = id => document.getElementById(id);
 const errbar = $('errbar');
-const nf = new Intl.NumberFormat('zh-CN');
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-const KIND = { tool: '工具', result: '结果', thinking: '思考', text: '文本', user: '用户' };
+const KINDS = new Set(['tool', 'result', 'thinking', 'text', 'user']);
 
 const stage = createStage($('stage'));
 const flyers = new Flyers(stage.scene);
@@ -27,7 +29,7 @@ const now = () => Date.now() + clockSkew;
 function setError(slot, msg) {
   if (msg) errors.set(slot, msg); else errors.delete(slot);
   errbar.hidden = errors.size === 0;
-  errbar.textContent = [...errors.values()].join('；');
+  errbar.textContent = [...errors.values()].join(tr('errJoin'));
 }
 
 function select(key) {
@@ -38,10 +40,10 @@ function select(key) {
 }
 
 function apply(snap) {
-  if (!snap || !Array.isArray(snap.rooms)) throw new Error('快照格式不正确');
+  if (!snap || !Array.isArray(snap.rooms)) throw new Error(tr('errSnapshot'));
   last = snap;
   if (snap.generatedAt) clockSkew = snap.generatedAt - Date.now();
-  $('proj').textContent = snap.project || '（未知项目）';
+  $('proj').textContent = snap.project || tr('unknownProject');
 
   for (const h of history.values()) h.gone = true;
   for (const m of roomMeta.values()) m.gone = true;
@@ -168,10 +170,10 @@ function rowHtml(h, t) {
   const a = h.agent;
   const state = h.gone ? 'done' : a.state;
   const cls = ['row', state === 'stuck' ? 'stuck' : '', h.gone || state === 'done' ? 'gone' : '', h.key === selected ? 'sel' : ''].join(' ');
-  const act = h.gone ? '已结束' : actionText(a, t);
+  const act = h.gone ? tr('finished') : actionText(a, t);
   return `<div class="${cls}" data-key="${esc(h.key)}">
     <span class="dot ${state}"></span>
-    <span class="nm">${state === 'stuck' ? '⚠ ' : ''}${esc(a.id === 'main' ? '主 agent' : shortName(a))} <span class="ty">${esc(a.type)}</span></span>
+    <span class="nm">${state === 'stuck' ? '⚠ ' : ''}${esc(a.id === 'main' ? tr('mainAgent') : shortName(a))} <span class="ty">${esc(a.type)}</span></span>
     <span class="el">${fmtDur(elapsed(a, h.gone, t))}</span>
     <span class="ac">${esc(act)}</span>
   </div>`;
@@ -182,11 +184,11 @@ let eventsSig = '';
 function renderSide(force) {
   const t = now();
   const { active, stuck, tokens } = totals();
-  $('st-rooms').textContent = nf.format(last ? last.rooms.length : 0);
-  $('st-active').textContent = nf.format(active);
-  $('st-stuck').textContent = nf.format(stuck);
+  $('st-rooms').textContent = fmtNum(last ? last.rooms.length : 0);
+  $('st-active').textContent = fmtNum(active);
+  $('st-stuck').textContent = fmtNum(stuck);
   $('st-stuck').classList.toggle('hot', stuck > 0);
-  $('st-tokens').textContent = nf.format(tokens);
+  $('st-tokens').textContent = fmtNum(tokens);
 
   const groups = new Map();
   for (const h of history.values()) {
@@ -199,10 +201,10 @@ function renderSide(force) {
     const shown = m.alias || m.name;
     const raw = m.alias && m.alias !== m.name ? `<span class="raw">${esc(m.name)}</span>` : '';
     const pv = m.provider === 'codex' ? '<span class="raw">Codex</span>' : '';
-    html += `<div class="room-h"><span class="dot ${m.gone ? 'done' : m.status}"></span>${esc(shown)}${raw}${pv}${m.gone ? '（已关闭）' : ''}<span class="n">${list.length} 个</span></div>`;
+    html += `<div class="room-h"><span class="dot ${m.gone ? 'done' : m.status}"></span>${esc(shown)}${raw}${pv}${m.gone ? tr('closed') : ''}<span class="n">${tr('agentCount', list.length)}</span></div>`;
     html += list.map(h => rowHtml(h, t)).join('');
   }
-  $('list').innerHTML = html || '<div class="empty">当前没有会话</div>';
+  $('list').innerHTML = html || `<div class="empty">${tr('noSessions')}</div>`;
 
   const h = selected && history.get(selected);
   $('detail').hidden = !h;
@@ -211,11 +213,11 @@ function renderSide(force) {
   const tk = a.tokens ?? {};
   $('detail-head').innerHTML = `<div class="d">${esc(a.description || a.id)}</div>
     <dl>
-      <dt>类型</dt><dd>${esc(a.type)}</dd>
-      <dt>状态</dt><dd>${h.gone ? '已结束（已从服务器移除）' : esc(actionText(a, t))}</dd>
-      <dt>已运行</dt><dd>${fmtDur(elapsed(a, h.gone, t))}</dd>
-      <dt>轮次</dt><dd>${nf.format(a.turns ?? 0)}</dd>
-      <dt>tokens</dt><dd>输入 ${nf.format(tk.in ?? 0)} / 输出 ${nf.format(tk.out ?? 0)} / 缓存读 ${nf.format(tk.cacheRead ?? 0)}</dd>
+      <dt>${tr('type')}</dt><dd>${esc(a.type)}</dd>
+      <dt>${tr('state')}</dt><dd>${h.gone ? tr('finishedRemoved') : esc(actionText(a, t))}</dd>
+      <dt>${tr('running')}</dt><dd>${fmtDur(elapsed(a, h.gone, t))}</dd>
+      <dt>${tr('turns')}</dt><dd>${fmtNum(a.turns ?? 0)}</dd>
+      <dt>tokens</dt><dd>${tr('input')} ${fmtNum(tk.in ?? 0)} / ${tr('output')} ${fmtNum(tk.out ?? 0)} / ${tr('cacheRead')} ${fmtNum(tk.cacheRead ?? 0)}</dd>
     </dl>`;
 
   const evs = a.events ?? [];
@@ -225,8 +227,8 @@ function renderSide(force) {
   const box = $('events');
   const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
   box.innerHTML = evs.length
-    ? evs.map(e => `<div class="ev ${esc(e.kind)}"><span class="ts">${new Date(e.ts).toLocaleTimeString('zh-CN', { hour12: false })}</span><span class="k">${KIND[e.kind] ?? esc(e.kind)}</span>${esc(e.text)}</div>`).join('')
-    : '<div class="empty">暂无事件</div>';
+    ? evs.map(e => `<div class="ev ${esc(e.kind)}"><span class="ts">${new Date(e.ts).toLocaleTimeString(locale(), { hour12: false })}</span><span class="k">${KINDS.has(e.kind) ? tr('kind_' + e.kind) : esc(e.kind)}</span>${esc(e.text)}</div>`).join('')
+    : `<div class="empty">${tr('noEvents')}</div>`;
   if (atBottom || force) box.scrollTop = box.scrollHeight;
 }
 
@@ -240,28 +242,28 @@ function safeApply(snap, slot) {
     setError(slot, null);
   } catch (err) {
     console.error(err);
-    setError(slot, `数据处理失败：${err.message}`);
+    setError(slot, tr('errData', err.message));
   }
 }
 
 loadRobot('/assets/RobotExpressive.glb')
   .then(() => last && safeApply(last, 'data'))
-  .catch(err => { console.error(err); setError('robot', `角色模型加载失败：${err.message}`); });
+  .catch(err => { console.error(err); setError('robot', tr('errRobot', err.message)); });
 
 fetch('/api/snapshot')
   .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
   .then(snap => safeApply(snap, 'data'))
-  .catch(err => setError('fetch', `无法获取快照：${err.message}`))
+  .catch(err => setError('fetch', tr('errFetch', err.message)))
   .finally(() => {
     const es = new EventSource('/events');
     es.onmessage = e => {
       setError('sse', null);
       setError('fetch', null);
       let snap;
-      try { snap = JSON.parse(e.data); } catch { setError('data', '实时数据不是合法 JSON'); return; }
+      try { snap = JSON.parse(e.data); } catch { setError('data', tr('errJson')); return; }
       safeApply(snap, 'data');
     };
-    es.onerror = () => setError('sse', '实时连接中断，正在重连…');
+    es.onerror = () => setError('sse', tr('errSse'));
   });
 
 const linkTargets = [];

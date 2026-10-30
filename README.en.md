@@ -29,18 +29,20 @@ Flags: `-project` defaults to the current directory, `-port` to 7788, `-stuck` t
 This repo is also a plugin marketplace for both Claude Code and Codex; the plugin lives in `plugins/agentwatch/`. Once installed, tell the agent "open agentwatch" (or use `/agentwatch` in Claude Code) and it runs `plugins/agentwatch/scripts/ensure-server.sh` in the current project directory: it reuses a server already on the port, otherwise starts one in the background (log at `log/agentwatch.log`) and prints the URL.
 
 ```bash
-# Claude Code
+# Claude Code: scope user (default) / project / local, UI language zh / en
 claude plugin marketplace add QuanjieDeng/agentwatch
-claude plugin install agentwatch@agentwatch
+claude plugin install agentwatch@agentwatch --scope project --config language=en
 
 # Codex
 codex plugin marketplace add QuanjieDeng/agentwatch
 codex plugin add agentwatch@agentwatch
 ```
 
+Installing interactively through Claude Code's `/plugin` asks for the install scope and UI language; the CLI takes `--scope` and `--config language=`. Scope decides which settings file records the plugin: `user` for you everywhere, `project` shared with the repo, `local` only in this repo. Change the language later with `claude plugin configure agentwatch`, then run `/agentwatch` again for a URL carrying the new `?lang=`. Running `go run .` directly follows the browser language; add `?lang=en` or `?lang=zh` to override.
+
 On first run, if the source is not on the machine yet, the script shallow-clones this repo to `~/tools/agentwatch` (set `AGENTWATCH_HOME` to change that), so `go`, `git` and `curl` must be on PATH. Update the source later with `git -C ~/tools/agentwatch pull`. To install a local dev checkout, pass `~/tools/agentwatch` as the marketplace instead.
 
-The script reads `AGENTWATCH_PORT` (default 7788) and `AGENTWATCH_HOME` (source location). The plugin ships no hooks.
+The script reads `AGENTWATCH_PORT` (default 7788), `AGENTWATCH_HOME` (source location), and `AGENTWATCH_LANG` (UI language `zh` / `en`). The plugin ships no hooks.
 
 ## States and animation
 

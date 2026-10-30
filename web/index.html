@@ -16,14 +16,14 @@
 </main>
 <aside id="side">
   <header>
-    <div class="proj" id="proj">正在连接…</div>
+    <div class="proj" id="proj" data-i18n="connecting">正在连接…</div>
     <div class="stats">
-      <div><b id="st-rooms">0</b><span>房间</span></div>
-      <div><b id="st-active">0</b><span>活跃</span></div>
-      <div><b id="st-stuck">0</b><span>卡住</span></div>
-      <div><b id="st-tokens">0</b><span>总 token</span></div>
+      <div><b id="st-rooms">0</b><span data-i18n="rooms">房间</span></div>
+      <div><b id="st-active">0</b><span data-i18n="active">活跃</span></div>
+      <div><b id="st-stuck">0</b><span data-i18n="stuck">卡住</span></div>
+      <div><b id="st-tokens">0</b><span data-i18n="tokens">总 token</span></div>
     </div>
-    <button id="reset" type="button">重置视角</button>
+    <button id="reset" type="button" data-i18n="resetView">重置视角</button>
   </header>
   <section id="list"></section>
   <section id="detail" hidden>
@@ -32,6 +32,6 @@
   </section>
 </aside>
 <!-- A failed import anywhere in the module graph means main.js never runs, so the error bar is set from here. -->
-<script type="module" src="/main.js" onerror="var b=document.getElementById('errbar');b.hidden=false;b.textContent='前端脚本加载失败（three.js 或模块缺失），请检查 web/vendor 与 web/*.js';"></script>
+<script type="module" src="/main.js" onerror="var b=document.getElementById('errbar');b.hidden=false;var s=(new URLSearchParams(location.search).get('lang')||localStorage.getItem('agentwatch-lang')||navigator.language||'').toLowerCase();b.textContent=s.indexOf('en')===0?'Failed to load the frontend (three.js or a module is missing); check web/vendor and web/*.js':'前端脚本加载失败（three.js 或模块缺失），请检查 web/vendor 与 web/*.js';"></script>
 </body>
 </html>

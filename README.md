@@ -29,18 +29,20 @@ cd ~/tools/agentwatch && go run . -demo -port 7799
 本仓库同时是 Claude Code 与 Codex 的插件 marketplace，插件在 `plugins/agentwatch/`。装好后对 agent 说「打开 agentwatch」，或在 Claude Code 里用 `/agentwatch`，它会在当前项目目录运行 `plugins/agentwatch/scripts/ensure-server.sh`：端口上已有服务就复用，否则后台起服务（日志 `log/agentwatch.log`），最后给出 URL。
 
 ```bash
-# Claude Code
+# Claude Code：安装范围 user（默认）/ project / local，界面语言 zh / en
 claude plugin marketplace add QuanjieDeng/agentwatch
-claude plugin install agentwatch@agentwatch
+claude plugin install agentwatch@agentwatch --scope project --config language=zh
 
 # Codex
 codex plugin marketplace add QuanjieDeng/agentwatch
 codex plugin add agentwatch@agentwatch
 ```
 
+在 Claude Code 的 `/plugin` 里交互式安装时，会直接询问安装范围和界面语言；命令行安装用 `--scope` 与 `--config language=` 指定。安装范围决定插件写进哪份设置：`user` 全局、`project` 随仓库共享、`local` 只在本仓库生效。语言装好后可用 `claude plugin configure agentwatch` 修改，重新运行 `/agentwatch` 即可拿到带 `?lang=` 的新地址。直接 `go run .` 运行时看板按浏览器语言选择，也可以手动加 `?lang=en` 或 `?lang=zh`。
+
 首次运行时本机还没有源码，脚本会自动浅克隆本仓库到 `~/tools/agentwatch`（要换位置就设 `AGENTWATCH_HOME`），所以 PATH 里需要 `go`、`git` 与 `curl`。之后更新源码用 `git -C ~/tools/agentwatch pull`。本地开发想直接装当前目录，把上面的仓库换成 `~/tools/agentwatch` 即可。
 
-脚本读 `AGENTWATCH_PORT`（默认 7788）与 `AGENTWATCH_HOME`（源码位置）。插件不带 hook。
+脚本读 `AGENTWATCH_PORT`（默认 7788）、`AGENTWATCH_HOME`（源码位置）与 `AGENTWATCH_LANG`（界面语言 `zh` / `en`）。插件不带 hook。
 
 ## 状态与动画
 

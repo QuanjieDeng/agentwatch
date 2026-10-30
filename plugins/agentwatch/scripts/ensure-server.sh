@@ -3,9 +3,16 @@
 set -eu
 
 port=${AGENTWATCH_PORT:-7788}
-url="http://localhost:$port"
+base="http://localhost:$port"
+url=$base
 
-alive() { curl -fsS --max-time 1 "$url/api/snapshot" >/dev/null 2>&1; }
+# 第一个参数是安装时选的界面语言，只认 zh / en；其它值（比如技能里的占位符原样传进来）忽略。
+lang=${1:-${AGENTWATCH_LANG:-}}
+case "$lang" in
+	zh|en) url="$base?lang=$lang" ;;
+esac
+
+alive() { curl -fsS --max-time 1 "$base/api/snapshot" >/dev/null 2>&1; }
 
 # 已有服务就复用，不管它看的是哪个项目：同一端口只能跑一个。
 if alive; then

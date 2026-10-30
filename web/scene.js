@@ -8,6 +8,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { NavGrid } from './nav.js';
+import { tr } from './i18n.js';
 
 // Room footprint in local units; the camera looks from +x/+z so the walls sit at -x and -z.
 const W = 8, D = 8, HW = W / 2, HD = D / 2;
@@ -305,7 +306,7 @@ export class RoomView {
     this.plateEl.children[0].className = `dot ${r.status}`;
     this.plateEl.children[1].textContent = r.alias || r.name || r.sessionId.slice(0, 8);
     this.plateEl.children[1].title = r.alias && r.name ? r.name : '';
-    this.plateEl.children[2].textContent = `${count} 个 agent${r.provider === 'codex' ? ' · Codex' : ''}`;
+    this.plateEl.children[2].textContent = `${tr('agents', count)}${r.provider === 'codex' ? ' · Codex' : ''}`;
   }
 
   ghostSpot(seed) {
