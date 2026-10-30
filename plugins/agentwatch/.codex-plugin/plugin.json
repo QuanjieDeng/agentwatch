@@ -1,0 +1,22 @@
+{
+  "name": "agentwatch",
+  "version": "0.1.0",
+  "description": "按需启动本地 agentwatch 看板：把当前项目的 Claude Code 与 Codex 会话画成实时 3D 办公室，每个会话一个房间。",
+  "author": {
+    "name": "dengquanjie"
+  },
+  "license": "MIT",
+  "keywords": ["agentwatch", "dashboard", "monitor", "claude-code", "codex"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "agentwatch",
+    "shortDescription": "实时 3D 看板，盯住本项目的 Claude Code 与 Codex 会话",
+    "longDescription": "在本机起一个 agentwatch 服务（已在跑就复用），扫描当前项目的 Claude Code 会话与 ~/.codex/sessions 下的 Codex rollout，每个会话画成一间办公室，agent 的思考、工具调用、卡住状态实时可见。",
+    "developerName": "dengquanjie",
+    "category": "Developer Tools",
+    "capabilities": ["Interactive", "Read"],
+    "defaultPrompt": [
+      "打开 agentwatch 看板。"
+    ]
+  }
+}

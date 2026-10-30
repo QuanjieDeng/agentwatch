@@ -1,0 +1,7 @@
+# 编译产物与运行时文件
+/agentwatch
+/log/
+
+# 个人配置与本地工作记录
+/aliases.json
+/.audit/

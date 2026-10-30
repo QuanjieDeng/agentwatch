@@ -1,0 +1,37 @@
+# agentwatch 插件
+
+在 Claude Code 或 Codex 里一句话打开 agentwatch 看板：当前项目的 Claude Code 与 Codex 会话各占一间 3D 办公室，agent 的思考、工具调用与卡住状态实时可见。
+
+## 安装
+
+```sh
+# Claude Code
+claude plugin marketplace add ~/tools/agentwatch
+claude plugin install agentwatch@agentwatch
+
+# Codex
+codex plugin marketplace add ~/tools/agentwatch
+codex plugin add agentwatch@agentwatch
+```
+
+## 包含什么
+
+- skill `agentwatch`：两端共用，agent 运行启动脚本并把看板 URL 交给你。
+- Claude Code 命令 `/agentwatch`：调用同一个脚本。
+- `scripts/ensure-server.sh`：幂等启动脚本。端口上已有服务就直接复用；否则以调用时所在目录为项目，在后台 `go run` 起服务，日志写到工具目录的 `log/agentwatch.log`。
+
+插件不带 hook，看板只在你要时启动。
+
+## 依赖
+
+- agentwatch 源码目录，默认 `~/tools/agentwatch`，其他位置用 `AGENTWATCH_HOME` 指定。
+- PATH 里有 `go` 与 `curl`。
+
+## 环境变量
+
+- `AGENTWATCH_PORT`：端口，默认 7788。
+- `AGENTWATCH_HOME`：agentwatch 源码目录。
+
+## 数据
+
+服务只在本机读 `~/.claude` 与 `~/.codex/sessions` 下的会话日志，只监听本机端口，没有外发与遥测。

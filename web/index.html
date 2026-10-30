@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agentwatch · 办公室</title>
+<link rel="stylesheet" href="/style.css">
+<script type="importmap">{"imports":{
+  "three":"/vendor/three/build/three.module.js",
+  "three/addons/":"/vendor/three/examples/jsm/"
+}}</script>
+</head>
+<body>
+<main id="stage">
+  <div id="errbar" hidden></div>
+</main>
+<aside id="side">
+  <header>
+    <div class="proj" id="proj">正在连接…</div>
+    <div class="stats">
+      <div><b id="st-rooms">0</b><span>房间</span></div>
+      <div><b id="st-active">0</b><span>活跃</span></div>
+      <div><b id="st-stuck">0</b><span>卡住</span></div>
+      <div><b id="st-tokens">0</b><span>总 token</span></div>
+    </div>
+    <button id="reset" type="button">重置视角</button>
+  </header>
+  <section id="list"></section>
+  <section id="detail" hidden>
+    <div id="detail-head"></div>
+    <div id="events"></div>
+  </section>
+</aside>
+<!-- A failed import anywhere in the module graph means main.js never runs, so the error bar is set from here. -->
+<script type="module" src="/main.js" onerror="var b=document.getElementById('errbar');b.hidden=false;b.textContent='前端脚本加载失败（three.js 或模块缺失），请检查 web/vendor 与 web/*.js';"></script>
+</body>
+</html>

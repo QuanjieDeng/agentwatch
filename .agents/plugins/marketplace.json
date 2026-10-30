@@ -1,0 +1,21 @@
+{
+  "name": "agentwatch",
+  "interface": {
+    "displayName": "agentwatch"
+  },
+  "plugins": [
+    {
+      "name": "agentwatch",
+      "source": {
+        "source": "local",
+        "path": "./plugins/agentwatch"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL",
+        "products": ["CODEX"]
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

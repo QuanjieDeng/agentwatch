@@ -1,0 +1,15 @@
+{
+  "name": "agentwatch",
+  "owner": {
+    "name": "dengquanjie"
+  },
+  "description": "agentwatch：把本项目的 Claude Code 与 Codex 会话画成实时 3D 办公室看板。",
+  "plugins": [
+    {
+      "name": "agentwatch",
+      "source": "./plugins/agentwatch",
+      "description": "按需启动本地 agentwatch 看板，并给出浏览器地址。",
+      "version": "0.1.0"
+    }
+  ]
+}
