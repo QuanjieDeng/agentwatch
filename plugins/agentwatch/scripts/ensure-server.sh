@@ -2,9 +2,9 @@
 # 启动或复用本地 agentwatch 服务，成功时打印看板 URL：先本机 localhost，再局域网 IP。
 set -eu
 
-port=${AGENTWATCH_PORT:-7788}
-base="http://localhost:$port"
+project=$(pwd -P)
 query=
+requested=${AGENTWATCH_PORT:-}
 
 # 第一个参数是安装时选的界面语言，只认 zh / en；其它值（比如技能里的占位符原样传进来）忽略。
 lang=${1:-${AGENTWATCH_LANG:-}}
@@ -15,6 +15,59 @@ esac
 # 服务绑定所有网卡（main.go 里是 :port），从另一台机器（Windows + VSCode Remote）打开时
 # localhost 指向那台机器自己，所以再给出本机 IP 直连地址。
 lan_ip=$(hostname -I 2>/dev/null | awk '{print $1}') || lan_ip=
+
+# 端口状态：mine=本项目已有服务，free=可以启动，busy=别的项目或别的服务占着。
+port_state() {
+	body=$(curl -fsS --max-time 1 "http://localhost:$1/api/snapshot" 2>/dev/null) || body=
+	if [ -n "$body" ]; then
+		watched=$(printf '%s' "$body" | sed -n 's/.*"project":"\([^"]*\)".*/\1/p')
+		if [ "$watched" = "$project" ]; then
+			echo mine
+		else
+			echo busy
+		fi
+		return 0
+	fi
+	# 不是 agentwatch：能连上就是被别的服务占用；只有连接被拒（curl 7）才算空闲。
+	curl -sS --max-time 1 -o /dev/null "http://localhost:$1/" >/dev/null 2>&1 && { echo busy; return 0; }
+	if [ $? -eq 7 ]; then echo free; else echo busy; fi
+}
+
+# 显式指定端口就只用它；否则从 7788 起找，同一台机器多个用户/项目各占一个。
+if [ -n "$requested" ]; then
+	candidates=$requested
+else
+	candidates="7788 7789 7790 7791 7792 7793 7794 7795"
+fi
+
+port=
+# 先找已经为本项目跑着的服务，避免同一项目起两个。
+for p in $candidates; do
+	if [ "$(port_state "$p")" = mine ]; then
+		port=$p
+		break
+	fi
+done
+reuse=${port:+1}
+# 没有再取第一个空闲端口。
+if [ -z "$port" ]; then
+	for p in $candidates; do
+		if [ "$(port_state "$p")" = free ]; then
+			port=$p
+			break
+		fi
+	done
+fi
+if [ -z "$port" ]; then
+	if [ -n "$requested" ]; then
+		echo "agentwatch：端口 $requested 已被别的项目或服务占用，请用 AGENTWATCH_PORT 换一个端口" >&2
+	else
+		echo "agentwatch：端口 7788-7795 都被占用，请用 AGENTWATCH_PORT 换一个端口" >&2
+	fi
+	exit 1
+fi
+
+base="http://localhost:$port"
 lan_url=${lan_ip:+"http://$lan_ip:$port$query"}
 
 print_urls() {
@@ -26,13 +79,11 @@ print_urls() {
 
 alive() { curl -fsS --max-time 1 "$base/api/snapshot" >/dev/null 2>&1; }
 
-# 已有服务就复用，不管它看的是哪个项目：同一端口只能跑一个。
-if alive; then
+if [ -n "$reuse" ]; then
 	print_urls
 	exit 0
 fi
 
-project=$PWD
 script_dir=$(cd "$(dirname "$0")" && pwd)
 # 从源码目录直接运行时上三级就是工具根；装进插件缓存后不是，用默认位置（首次运行从 GitHub 浅克隆）。
 if [ -n "${AGENTWATCH_HOME:-}" ]; then
@@ -78,5 +129,5 @@ while [ $i -lt 30 ]; do
 	sleep 0.5
 	i=$((i + 1))
 done
-echo "agentwatch：15 秒内服务没有就绪，日志见 $logfile" >&2
+echo "agentwatch：15 秒内服务没有在端口 $port 就绪（可能刚被他人占用），日志见 $logfile" >&2
 exit 1

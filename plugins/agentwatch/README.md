@@ -33,7 +33,7 @@ codex plugin add agentwatch@agentwatch
 
 ## 环境变量
 
-- `AGENTWATCH_PORT`：端口，默认 7788。
+- `AGENTWATCH_PORT`：指定端口。不设置时从 7788 起找：本项目已有服务就复用，被别的项目或别的服务占用（比如同一台机器上的同事）就顺延到 7789、7790…；设置后只用该端口，被占用直接报错。
 - `AGENTWATCH_HOME`：agentwatch 源码目录。
 - `AGENTWATCH_LANG`：界面语言 `zh` / `en`，命令行第一个参数或插件选项优先。
 
