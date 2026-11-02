@@ -9,7 +9,7 @@
       "name": "agentwatch",
       "source": "./plugins/agentwatch",
       "description": "按需启动本地 agentwatch 看板，并给出浏览器地址。",
-      "version": "0.1.0"
+      "version": "0.1.1"
     }
   ]
 }

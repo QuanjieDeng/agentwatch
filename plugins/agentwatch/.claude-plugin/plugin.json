@@ -1,6 +1,6 @@
 {
   "name": "agentwatch",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "按需启动本地 agentwatch 看板：把当前项目的 Claude Code 与 Codex 会话画成实时 3D 办公室，每个会话一个房间。",
   "author": {
     "name": "dengquanjie"
