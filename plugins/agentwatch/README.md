@@ -39,4 +39,4 @@ codex plugin add agentwatch@agentwatch
 
 ## 数据
 
-服务只在本机读 `~/.claude` 与 `~/.codex/sessions` 下的会话日志，只监听本机端口，没有外发与遥测。
+服务只在本机读 `~/.claude` 与 `~/.codex/sessions` 下的会话日志，没有外发与遥测。它绑定所有网卡（`:端口`），所以启动脚本会同时给出 `localhost` 和本机局域网 IP 两个地址：后者用于从另一台机器（如 Windows 连远程 Linux）直接打开。看板没有鉴权，只在可信网络内使用。

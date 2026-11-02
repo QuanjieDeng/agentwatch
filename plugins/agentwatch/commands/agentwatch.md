@@ -9,4 +9,4 @@ allowed-tools: Bash(sh *)
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-server.sh" "${user_config.language}"
 ```
 
-成功时把最后一行的 URL 告诉用户。退出码非 0 时，把 stderr 原样转述给用户。
+成功时把打印的 URL 都告诉用户：第一行 localhost 用于本机或已转发端口的情况，第二行局域网 IP 用于从另一台机器（如 Windows + VSCode Remote）打开；两行都打不开时提示用户在 VSCode 的「端口 / PORTS」面板手动转发。退出码非 0 时，把 stderr 原样转述给用户。

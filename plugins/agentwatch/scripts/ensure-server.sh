@@ -1,22 +1,34 @@
 #!/bin/sh
-# 启动或复用本地 agentwatch 服务，成功时最后一行打印看板 URL。
+# 启动或复用本地 agentwatch 服务，成功时打印看板 URL：先本机 localhost，再局域网 IP。
 set -eu
 
 port=${AGENTWATCH_PORT:-7788}
 base="http://localhost:$port"
-url=$base
+query=
 
 # 第一个参数是安装时选的界面语言，只认 zh / en；其它值（比如技能里的占位符原样传进来）忽略。
 lang=${1:-${AGENTWATCH_LANG:-}}
 case "$lang" in
-	zh|en) url="$base?lang=$lang" ;;
+	zh|en) query="?lang=$lang" ;;
 esac
+
+# 服务绑定所有网卡（main.go 里是 :port），从另一台机器（Windows + VSCode Remote）打开时
+# localhost 指向那台机器自己，所以再给出本机 IP 直连地址。
+lan_ip=$(hostname -I 2>/dev/null | awk '{print $1}') || lan_ip=
+lan_url=${lan_ip:+"http://$lan_ip:$port$query"}
+
+print_urls() {
+	echo "$base$query"
+	if [ -n "$lan_url" ]; then
+		echo "$lan_url"
+	fi
+}
 
 alive() { curl -fsS --max-time 1 "$base/api/snapshot" >/dev/null 2>&1; }
 
 # 已有服务就复用，不管它看的是哪个项目：同一端口只能跑一个。
 if alive; then
-	echo "$url"
+	print_urls
 	exit 0
 fi
 
@@ -60,7 +72,7 @@ nohup go run . -project "$project" -port "$port" >"$logfile" 2>&1 &
 i=0
 while [ $i -lt 30 ]; do
 	if alive; then
-		echo "$url"
+		print_urls
 		exit 0
 	fi
 	sleep 0.5
