@@ -1,6 +1,6 @@
 import { createStage, RoomView, Flyers, roomSlot, roomsBox } from './scene.js';
 import { Actor, loadRobot, robotReady, shortName, actionText, fmtDur } from './agents.js';
-import { initLang, tr, locale, fmtNum } from './i18n.js';
+import { initLang, tr, locale, fmtNum, agentName } from './i18n.js';
 
 initLang();
 
@@ -173,7 +173,7 @@ function rowHtml(h, t) {
   const act = h.gone ? tr('finished') : actionText(a, t);
   return `<div class="${cls}" data-key="${esc(h.key)}">
     <span class="dot ${state}"></span>
-    <span class="nm">${state === 'stuck' ? '⚠ ' : ''}${esc(a.id === 'main' ? tr('mainAgent') : shortName(a))} <span class="ty">${esc(a.type)}</span></span>
+    <span class="nm">${state === 'stuck' ? '⚠ ' : ''}${esc(shortName(a))} <span class="ty">${esc(a.type)}</span></span>
     <span class="el">${fmtDur(elapsed(a, h.gone, t))}</span>
     <span class="ac">${esc(act)}</span>
   </div>`;
@@ -211,7 +211,7 @@ function renderSide(force) {
   if (!h) return;
   const a = h.agent;
   const tk = a.tokens ?? {};
-  $('detail-head').innerHTML = `<div class="d">${esc(a.description || a.id)}</div>
+  $('detail-head').innerHTML = `<div class="d">${esc(agentName(a))}</div>
     <dl>
       <dt>${tr('type')}</dt><dd>${esc(a.type)}</dd>
       <dt>${tr('state')}</dt><dd>${h.gone ? tr('finishedRemoved') : esc(actionText(a, t))}</dd>

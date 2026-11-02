@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import { tr } from './i18n.js';
+import { tr, agentName } from './i18n.js';
 
 const PALETTE = ['#8ec5e8', '#f4a7b9', '#a8d8b9', '#c9b6e4', '#f7c59f', '#9fd8d3', '#e8c99a', '#b5c8f0', '#f0b5d1', '#c4dca0'];
 const FOREMAN = '#e9894f';
@@ -45,7 +45,7 @@ export function fmtDur(ms) {
 
 const trunc = (s, n) => (s.length > n ? s.slice(0, n) + '…' : s);
 
-export const shortName = a => trunc(a.description || a.type || a.id, 18);
+export const shortName = a => trunc(agentName(a), 18);
 
 export function actionText(a, now) {
   switch (a.state) {

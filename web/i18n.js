@@ -116,6 +116,9 @@ export function tr(key, ...args) {
   return typeof v === 'function' ? v(...args) : v;
 }
 
+// 主 agent 的 description 是服务端给的固定中文，界面统一按当前语言显示。
+export const agentName = a => (a.id === 'main' ? tr('mainAgent') : a.description || a.type || a.id);
+
 export function initLang() {
   const q = new URLSearchParams(location.search).get('lang');
   lang = resolveLang(q, localStorage.getItem(KEY), navigator.language);
