@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -205,17 +206,17 @@ type codexMeta struct {
 	startedAt int64
 }
 
-// CodexScanner 把 ~/.codex/sessions 下 cwd 等于本项目的 rollout 变成房间。
+// CodexScanner 把 ~/.codex/sessions 下所有 rollout 变成房间，按 session_meta.cwd 归组。
 // 子 agent 与纸飞机留空：Codex 日志里还没有可对上的子 agent 元数据，有真实样本再补。
 type CodexScanner struct {
-	Project, Home, AliasFile string
-	Stuck, History           time.Duration
-	metas                    map[string]codexMeta // rollout 路径 -> 第一行 session_meta
-	logs                     map[string]*codexLog
+	Home, AliasFile string
+	Stuck, History  time.Duration
+	metas           map[string]codexMeta // rollout 路径 -> 第一行 session_meta
+	logs            map[string]*codexLog
 }
 
-func NewCodexScanner(project, home, aliasFile string, stuck, history time.Duration) *CodexScanner {
-	return &CodexScanner{Project: project, Home: home, AliasFile: aliasFile, Stuck: stuck, History: history, metas: map[string]codexMeta{}, logs: map[string]*codexLog{}}
+func NewCodexScanner(home, aliasFile string, stuck, history time.Duration) *CodexScanner {
+	return &CodexScanner{Home: home, AliasFile: aliasFile, Stuck: stuck, History: history, metas: map[string]codexMeta{}, logs: map[string]*codexLog{}}
 }
 
 func readCodexMeta(path string) (codexMeta, bool) {
@@ -269,12 +270,16 @@ func codexThreadNames(path string) map[string]string {
 
 func (s *CodexScanner) Scan(now time.Time) Snapshot {
 	nowMs := now.UnixMilli()
-	snap := Snapshot{Project: s.Project, GeneratedAt: nowMs, Rooms: []Room{}}
+	snap := Snapshot{Owner: s.Home, GeneratedAt: nowMs, Rooms: []Room{}}
 	root := filepath.Join(s.Home, ".codex")
 	var paths []string
 	// ponytail: 每秒全量 walk，会话目录涨到上万个文件再改成按日期目录剪枝。
 	_ = filepath.WalkDir(filepath.Join(root, "sessions"), func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".jsonl") {
+			return nil
+		}
+		// 先用 mtime 挡掉旧 rollout，避免启动时把历史目录里所有文件都读一遍。
+		if fi, err := d.Info(); err != nil || now.Sub(fi.ModTime()) > s.History {
 			return nil
 		}
 		m, ok := s.metas[p]
@@ -284,7 +289,7 @@ func (s *CodexScanner) Scan(now time.Time) Snapshot {
 			}
 			s.metas[p] = m
 		}
-		if m.cwd == s.Project && m.id != "" {
+		if m.cwd != "" && m.cwd != "." && m.id != "" {
 			paths = append(paths, p)
 		}
 		return nil
@@ -327,9 +332,10 @@ func (s *CodexScanner) Scan(now time.Time) Snapshot {
 			main.State = "idle"
 		}
 		snap.Rooms = append(snap.Rooms, Room{
-			SessionID: m.id, Name: name, Alias: alias, Provider: "codex", Status: status,
+			SessionID: m.id, Name: name, Alias: alias, Project: m.cwd, Provider: "codex", Status: status,
 			StartedAt: m.startedAt, Main: main, Agents: []Agent{}, Messages: []Msg{},
 		})
 	}
+	sort.SliceStable(snap.Rooms, func(i, j int) bool { return snap.Rooms[i].StartedAt < snap.Rooms[j].StartedAt })
 	return snap
 }

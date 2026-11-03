@@ -121,7 +121,6 @@ func TestScanEndToEnd(t *testing.T) {
 	must(t, os.MkdirAll(filepath.Join(home, ".claude", "sessions"), 0o755))
 	reg := `{"pid":` + strconv.Itoa(os.Getpid()) + `,"sessionId":"` + sid + `","cwd":"` + project + `","status":"busy","name":"","startedAt":42}`
 	must(t, os.WriteFile(filepath.Join(home, ".claude", "sessions", "1.json"), []byte(reg), 0o644))
-	must(t, os.WriteFile(filepath.Join(home, ".claude", "sessions", "2.json"), []byte(`{"pid":1,"cwd":"/other","sessionId":"zzz"}`), 0o644))
 	mainLine := strings.Replace(lineTool, `"isSidechain":true`, `"isSidechain":false`, 1)
 	must(t, os.WriteFile(filepath.Join(logDir, sid+".jsonl"), []byte(mainLine+"\n"), 0o644))
 	must(t, os.WriteFile(filepath.Join(sub, "agent-abc.jsonl"), []byte(lineUser+"\n"+lineTool+"\n"), 0o644))
@@ -129,15 +128,44 @@ func TestScanEndToEnd(t *testing.T) {
 	must(t, os.WriteFile(filepath.Join(sub, "agent-old.jsonl"), []byte(lineText+"\n"), 0o644))
 	must(t, os.WriteFile(filepath.Join(sub, "agent-old.meta.json"), []byte(`{"agentType":"Plan","finished":true}`), 0o644))
 
+	// 第二个项目：只有注册表、进程已死，验证多项目并存。
+	sid2 := "aaaa2222-3333-4444-5555-666677778888"
+	logDir2 := filepath.Join(home, ".claude", "projects", "-work-other")
+	must(t, os.MkdirAll(logDir2, 0o755))
+	reg2 := `{"pid":0,"sessionId":"` + sid2 + `","cwd":"/work/other","status":"idle","name":"other-name","startedAt":43}`
+	reg2Path := filepath.Join(home, ".claude", "sessions", "2.json")
+	must(t, os.WriteFile(reg2Path, []byte(reg2), 0o644))
+	must(t, os.WriteFile(filepath.Join(logDir2, sid2+".jsonl"), []byte(`{"type":"user","isSidechain":false,"timestamp":"2026-10-29T13:00:01Z","cwd":"/work/other","message":{"content":"hi"}}`+"\n"), 0o644))
+	// 会话结束时没有写 finished 的子 agent，不应在已关闭的房间里显示成 stuck。
+	sub2 := filepath.Join(logDir2, sid2, "subagents")
+	must(t, os.MkdirAll(sub2, 0o755))
+	must(t, os.WriteFile(filepath.Join(sub2, "agent-stuck.jsonl"), []byte(lineUser+"\n"), 0o644))
+
+	// 第三个项目：没有任何注册表记录，只能靠日志里的 cwd 认领。
+	sid3 := "bbbb3333-4444-5555-6666-777788889999"
+	histDir := filepath.Join(home, ".claude", "projects", "-work-hist")
+	must(t, os.MkdirAll(histDir, 0o755))
+	histPath := filepath.Join(histDir, sid3+".jsonl")
+	histLine := strings.Replace(lineText, `"isSidechain":true`, `"isSidechain":false,"cwd":"/work/hist"`, 1)
+	// 会话中途 cd 不该改变房间归属。
+	histLine2 := `{"type":"user","isSidechain":false,"timestamp":"2026-10-29T13:00:05Z","cwd":"/work/elsewhere","message":{"content":"cd 之后"}}`
+	must(t, os.WriteFile(histPath, []byte(histLine+"\n"+histLine2+"\n"), 0o644))
+
 	aliasFile := filepath.Join(home, "aliases.json")
 	must(t, os.WriteFile(aliasFile, []byte(`{"`+sid+`":"按会话ID","11112222":"按名字"}`), 0o644))
-	s := NewScanner(project, home, aliasFile, 120*time.Second, 180*time.Second)
+	s := NewScanner(home, aliasFile, 120*time.Second, 180*time.Second, 24*time.Hour)
 	snap := s.Scan(time.UnixMilli(ms("2026-10-29T13:00:10Z")))
-	if len(snap.Rooms) != 1 {
-		t.Fatalf("rooms = %d, want 1", len(snap.Rooms))
+	if len(snap.Owner) == 0 || snap.Owner != home {
+		t.Errorf("owner = %q, want %q", snap.Owner, home)
 	}
-	r := snap.Rooms[0]
-	if r.Name != "11112222" || r.Alias != "按会话ID" || r.Status != "busy" || r.StartedAt != 42 {
+	if len(snap.Rooms) != 3 {
+		t.Fatalf("rooms = %d, want 3", len(snap.Rooms))
+	}
+	r := roomByID(snap, sid)
+	if r == nil {
+		t.Fatal("missing room for live session")
+	}
+	if r.Name != "11112222" || r.Alias != "按会话ID" || r.Status != "busy" || r.StartedAt != 42 || r.Project != project {
 		t.Errorf("room = %+v", r)
 	}
 	if r.Main.ID != "main" || r.Main.State != "tool" || r.Main.Tool != "Bash" {
@@ -146,15 +174,48 @@ func TestScanEndToEnd(t *testing.T) {
 	if len(r.Agents) != 2 || r.Agents[0].ID != "abc" || r.Agents[0].Type != "Explore" || r.Agents[1].State != "done" {
 		t.Fatalf("agents = %+v", r.Agents)
 	}
+	if r := roomByID(snap, sid2); r == nil || r.Project != "/work/other" || r.Status != "dead" {
+		t.Errorf("second project room = %+v", r)
+	}
+	if r := roomByID(snap, sid3); r == nil || r.Project != "/work/hist" || r.Status != "idle" {
+		t.Errorf("history room = %+v", r)
+	}
 
 	must(t, os.WriteFile(aliasFile, []byte(`{"11112222":"按名字"}`), 0o644))
 	later := s.Scan(time.UnixMilli(ms("2026-10-29T13:05:00Z")))
-	if a := later.Rooms[0].Agents; len(a) != 1 || a[0].ID != "abc" || a[0].State != "stuck" {
-		t.Fatalf("after ghost window: %+v", a)
+	if r := roomByID(later, sid); r == nil || len(r.Agents) != 1 || r.Agents[0].ID != "abc" || r.Agents[0].State != "stuck" {
+		t.Fatalf("after ghost window: %+v", r)
 	}
-	if got := later.Rooms[0].Alias; got != "按名字" {
+	if got := roomByID(later, sid).Alias; got != "按名字" {
 		t.Errorf("alias by session name = %q, want 按名字", got)
 	}
+
+	// 注册表文件随会话结束消失后，名字、分组、开始时间与 dead 状态都要保持。
+	must(t, os.Remove(reg2Path))
+	ended := s.Scan(time.UnixMilli(ms("2026-10-29T13:05:00Z")))
+	r2 := roomByID(ended, sid2)
+	if r2 == nil || r2.Name != "other-name" || r2.Project != "/work/other" || r2.Status != "dead" || r2.StartedAt != 43 {
+		t.Fatalf("room after registry removal = %+v", r2)
+	}
+	if len(r2.Agents) != 1 || r2.Agents[0].State != "idle" {
+		t.Errorf("abandoned subagent = %+v, want idle", r2.Agents)
+	}
+
+	old := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	must(t, os.Chtimes(histPath, old, old))
+	dropped := s.Scan(time.UnixMilli(ms("2026-10-29T13:05:00Z")))
+	if roomByID(dropped, sid3) != nil {
+		t.Error("history room older than -history should be dropped")
+	}
+}
+
+func roomByID(s Snapshot, id string) *Room {
+	for i := range s.Rooms {
+		if s.Rooms[i].SessionID == id {
+			return &s.Rooms[i]
+		}
+	}
+	return nil
 }
 
 func TestMessages(t *testing.T) {
@@ -176,7 +237,7 @@ func TestMessages(t *testing.T) {
 	must(t, os.WriteFile(filepath.Join(sub, "agent-abc.jsonl"), []byte(lineUser+"\n"+lineText+"\n"), 0o644))
 	must(t, os.WriteFile(filepath.Join(sub, "agent-abc.meta.json"), []byte(`{"agentType":"Explore","description":"d","finished":true,"toolUseId":"tu1"}`), 0o644))
 
-	s := NewScanner(project, home, filepath.Join(home, "aliases.json"), 120*time.Second, 180*time.Second)
+	s := NewScanner(home, filepath.Join(home, "aliases.json"), 120*time.Second, 180*time.Second, 24*time.Hour)
 	snap := s.Scan(time.UnixMilli(ms("2026-10-29T13:00:10Z")))
 	got := []string{}
 	for _, m := range snap.Rooms[0].Messages {

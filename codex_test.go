@@ -41,21 +41,37 @@ func TestCodexRollout(t *testing.T) {
 		`{"timestamp":"2026-10-30T10:00:00Z","type":"session_meta","payload":{"id":"other","timestamp":"2026-10-30T10:00:00Z","cwd":"/elsewhere"}}`)
 	writeRollout(t, home, "rollout-old.jsonl",
 		`{"timestamp":"2026-10-01T10:00:00Z","type":"session_meta","payload":{"id":"old","timestamp":"2026-10-01T10:00:00Z","cwd":"/work/proj"}}`)
+	// 文件很旧但 meta 时间很新：mtime 预筛应先挡掉，不读内容。
+	writeRollout(t, home, "rollout-mtime-old.jsonl",
+		`{"timestamp":"2026-10-30T10:00:05Z","type":"session_meta","payload":{"id":"mtime-old","timestamp":"2026-10-30T10:00:05Z","cwd":"/work/proj"}}`)
+	oldFileTime := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	os.Chtimes(filepath.Join(home, ".codex", "sessions", "2026", "10", "30", "rollout-mtime-old.jsonl"), oldFileTime, oldFileTime)
+	writeRollout(t, home, "rollout-nocwd.jsonl",
+		`{"timestamp":"2026-10-30T10:00:05Z","type":"session_meta","payload":{"id":"nocwd","timestamp":"2026-10-30T10:00:05Z","cwd":""}}`)
 	half := `{"timestamp":"2026-10-30T10:00:05Z","type":"session_meta","payload":{"id":"late","timestamp":"2026-10-30T10:00:05Z","cwd":"/work/proj"}}`
 	halfPath := filepath.Join(home, ".codex", "sessions", "2026", "10", "30", "rollout-half.jsonl")
 	os.WriteFile(halfPath, []byte(half[:40]), 0o644)
 	os.WriteFile(filepath.Join(home, ".codex", "session_index.jsonl"),
 		[]byte(`{"id":"019a-sess-aaaa","thread_name":"跑测试","updated_at":"2026-10-30T10:00:06Z"}`+"\n"), 0o644)
 
-	s := NewCodexScanner(project, home, filepath.Join(home, "none.json"), 2*time.Minute, 24*time.Hour)
+	s := NewCodexScanner(home, filepath.Join(home, "none.json"), 2*time.Minute, 24*time.Hour)
 	last := time.Date(2026, 10, 30, 10, 0, 6, 0, time.UTC)
 	snap := s.Scan(last.Add(10 * time.Second))
-	if len(snap.Rooms) != 1 {
-		t.Fatalf("rooms = %d, want 1 (other cwd and out-of-window sessions dropped)", len(snap.Rooms))
+	if len(snap.Rooms) != 2 {
+		t.Fatalf("rooms = %d, want 2 (out-of-window session dropped)", len(snap.Rooms))
 	}
-	r := snap.Rooms[0]
-	if r.Provider != "codex" || r.Name != "跑测试" || r.SessionID != "019a-sess-aaaa" || r.Status != "busy" {
-		t.Errorf("room = provider %q name %q id %q status %q", r.Provider, r.Name, r.SessionID, r.Status)
+	r := roomByID(snap, "019a-sess-aaaa")
+	if r == nil {
+		t.Fatal("missing room for 019a-sess-aaaa")
+	}
+	if r.Provider != "codex" || r.Name != "跑测试" || r.Project != project || r.Status != "busy" {
+		t.Errorf("room = provider %q name %q project %q status %q", r.Provider, r.Name, r.Project, r.Status)
+	}
+	if o := roomByID(snap, "other"); o == nil || o.Project != "/elsewhere" {
+		t.Errorf("room in another cwd = %+v", o)
+	}
+	if roomByID(snap, "mtime-old") != nil || roomByID(snap, "nocwd") != nil {
+		t.Errorf("stale mtime or empty cwd rollout should be dropped: %+v", snap.Rooms)
 	}
 	if r.StartedAt != ms("2026-10-30T10:00:00Z") || r.Agents == nil || r.Messages == nil {
 		t.Errorf("startedAt=%d agents=%v messages=%v", r.StartedAt, r.Agents, r.Messages)
@@ -82,8 +98,8 @@ func TestCodexRollout(t *testing.T) {
 	}
 
 	os.WriteFile(halfPath, []byte(half+"\n"), 0o644)
-	if snap := s.Scan(last.Add(10 * time.Second)); len(snap.Rooms) != 2 {
-		t.Errorf("rooms after half line completed = %d, want 2 (failed meta read must not be cached)", len(snap.Rooms))
+	if snap := s.Scan(last.Add(10 * time.Second)); len(snap.Rooms) != 3 {
+		t.Errorf("rooms after half line completed = %d, want 3 (failed meta read must not be cached)", len(snap.Rooms))
 	}
 
 	if snap := s.Scan(last.Add(48 * time.Hour)); len(snap.Rooms) != 0 {

@@ -12,7 +12,7 @@
 
 ```go
 type Snapshot struct {
-    Project     string `json:"project"`
+    Owner       string `json:"owner"`       // 被扫描的用户根目录（$HOME）
     GeneratedAt int64  `json:"generatedAt"` // epoch ms
     Rooms       []Room `json:"rooms"`
 }
@@ -20,6 +20,7 @@ type Room struct {
     SessionID string  `json:"sessionId"`
     Name      string  `json:"name"`
     Alias     string  `json:"alias"`     // aliases.json 里的用户别名，空则回落到 Name
+    Project   string  `json:"project"`   // 会话的工作目录（cwd），前端按它分组
     Provider  string  `json:"provider"`  // claude | codex，会话来自哪个宿主
     Status    string  `json:"status"`    // busy | idle | dead
     StartedAt int64   `json:"startedAt"`
@@ -74,6 +75,7 @@ type Event struct {
 - `since` 是当前状态开始的时间，前端用它算「已持续多久」。
 - `turns` 是 assistant 消息条数，`tokens` 是这些消息 usage 的累加。同一条消息被拆成多行日志时只算一次。
 - `rooms` 按 `startedAt` 升序，`agents` 按 `startedAt` 升序，前端可依赖此顺序做稳定布局。
+- 一个快照覆盖当前用户下的所有工作目录；每个房间用 `project` 标明自己的 cwd，前端按此分组展示。`owner` 是扫描的用户 home，启动脚本据此判断能否复用已有服务。
 - `messages` 是 agent 之间的消息，前端据此放纸飞机：
   - 主 agent 派活给子 agent：`from` 为 `"main"`，`to` 为子 agent id，`ts` 取 Agent 工具调用的时间。
   - 子 agent 交回结果：`from` 为子 agent id，`to` 为 `"main"`，`ts` 取子 agent 最后一条事件的时间。
@@ -81,11 +83,15 @@ type Event struct {
 
 ## Codex 房间
 
-`provider` 为 `"codex"` 的房间来自 `~/.codex/sessions/**/rollout-*.jsonl`，只收第一行 `session_meta.cwd` 等于本项目的会话，字段语义与上面一致，以下几处不同：
+`provider` 为 `"codex"` 的房间来自 `~/.codex/sessions/**/rollout-*.jsonl`，`project` 取第一行 `session_meta.cwd`，字段语义与上面一致，以下几处不同：
 
 - `name` 取 `~/.codex/session_index.jsonl` 里的 `thread_name`，没有就取会话 id 前 8 位。
 - Codex 没有进程注册表，`status` 只有 `busy` 与 `idle`：距主 agent `lastEventAt` 不超过 120 秒为 `busy`，否则 `idle`，从不出现 `dead`。
 - 只有主 agent，`agents` 与 `messages` 恒为 `[]`。
 - 主 agent 状态：用户输入与助手文本为 `thinking`，工具调用为 `tool`，工具输出为 `processing`，`task_complete` 后为 `idle`。会话不是 `busy` 时不显示 `stuck`。
 - `turns` 是去重后的助手消息条数，`tokens` 直接取最近一次 `token_count` 的累计用量，`in` / `out` / `cacheRead` 对应 `input_tokens` / `output_tokens` / `cached_input_tokens`。
-- 最后一条事件早于 `-codex-history`（默认 24 小时）的会话不输出。
+- 最后一条事件早于 `-history`（默认 24 小时）的会话不输出。
+
+## Claude 房间来源
+
+Claude Code 的房间来自注册表 `~/.claude/sessions/*.json` 里的会话，加上 `~/.claude/projects/*/*.jsonl` 中最近 `-history` 内改动过的会话日志（没有注册表记录的历史会话按日志行里的 `cwd` 归组）。没有注册表记录的房间 `status` 为 `idle`。

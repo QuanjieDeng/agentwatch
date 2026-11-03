@@ -13,6 +13,7 @@ import { tr } from './i18n.js';
 // Room footprint in local units; the camera looks from +x/+z so the walls sit at -x and -z.
 const W = 8, D = 8, HW = W / 2, HD = D / 2;
 const PITCH_X = 10.5, PITCH_Z = 9.5, PER_ROW = 3;
+export { PER_ROW };
 const VIEW_DIR = new THREE.Vector3(1, 1.05, 1).normalize();
 const DESK_X = [-2.4, -0.8, 0.8, 2.4];
 const DESK_Z = [-0.9, 1.4];
@@ -49,14 +50,15 @@ export function createStage(host) {
   sun.shadow.radius = 3;
   scene.add(sun, sun.target);
 
-  const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 400);
+  const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 800);
   // The label layer is pointer-events:none so drags reach the canvas; tags opt back in individually.
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
   controls.maxPolarAngle = Math.PI * 0.46;
   controls.minDistance = 4;
-  controls.maxDistance = 160;
+  // 房间按工作目录分组之间留了空行，场景会比单项目时大很多。
+  controls.maxDistance = 320;
 
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
@@ -82,7 +84,8 @@ export function createStage(host) {
     const sphere = box.getBoundingSphere(new THREE.Sphere());
     const vfov = THREE.MathUtils.degToRad(camera.fov);
     const hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect);
-    const dist = sphere.radius / Math.sin(Math.min(vfov, hfov) / 2) * 0.82;
+    // 乘数必须大于 1 才是留边距；小于 1 会把球顶到视锥外，宽布局的角落房间会被裁掉。
+    const dist = sphere.radius / Math.sin(Math.min(vfov, hfov) / 2) * 1.05;
     fly.fromP.copy(camera.position);
     fly.fromT.copy(controls.target);
     fly.toT.copy(sphere.center).setY(0.4);
@@ -142,6 +145,37 @@ export function roomsBox(n) {
     box.expandByPoint(new THREE.Vector3(p.x + HW, 2.2, p.z + HD));
   }
   return box;
+}
+
+// 每个工作目录在场景上方挂一块名牌，标出按目录划分后的房间簇。
+export class ProjectTags {
+  constructor(parent) {
+    this.parent = parent;
+    this.items = new Map();
+  }
+
+  sync(list) {
+    const keep = new Set();
+    for (const t of list) {
+      keep.add(t.key);
+      let tag = this.items.get(t.key);
+      if (!tag) {
+        const el = document.createElement('div');
+        el.className = 'proj-tag';
+        tag = new CSS2DObject(el);
+        this.parent.add(tag);
+        this.items.set(t.key, tag);
+      }
+      if (tag.element.textContent !== t.text) tag.element.textContent = t.text;
+      if (t.color) tag.element.style.setProperty('--tag', t.color);
+      tag.position.set(t.x, t.y, t.z);
+    }
+    for (const [key, tag] of this.items) {
+      if (keep.has(key)) continue;
+      tag.removeFromParent();
+      this.items.delete(key);
+    }
+  }
 }
 
 const std = (color, extra) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...extra });
@@ -255,15 +289,21 @@ export class RoomView {
     this.target = new THREE.Vector3();
     this.door = new THREE.Vector3(HW - 0.9, 0, HD - 0.3);
     const g = this.group;
+    // 每个工作目录一套配色，需要独立材质，不能直接改共享的 M.*。
+    this.floorMat = M.floor.clone();
+    this.rugMat = M.rug.clone();
+    this.rugEdgeMat = M.rugEdge.clone();
+    this.wallMat = M.wall.clone();
+    this.wallTrimMat = M.wallTrim.clone();
     this.foremanSpot = buildDesk(0, -2.3);
     g.add(this.foremanSpot.group);
-    g.add(mesh(G.floor, M.floor, 0, -0.15, 0, false));
-    g.add(mesh(G.wallBack, M.wall, 0, 0.55, -HD + 0.09));
-    g.add(mesh(G.wallLeft, M.wall, -HW + 0.09, 0.55, 0));
-    g.add(mesh(G.trimBack, M.wallTrim, 0, 1.1, -HD + 0.09));
-    g.add(mesh(G.trimLeft, M.wallTrim, -HW + 0.09, 1.1, 0));
-    g.add(mesh(G.rugEdge, M.rugEdge, 0.2, 0.01, 0.25, false));
-    g.add(mesh(G.rug, M.rug, 0.2, 0.02, 0.25, false));
+    g.add(mesh(G.floor, this.floorMat, 0, -0.15, 0, false));
+    g.add(mesh(G.wallBack, this.wallMat, 0, 0.55, -HD + 0.09));
+    g.add(mesh(G.wallLeft, this.wallMat, -HW + 0.09, 0.55, 0));
+    g.add(mesh(G.trimBack, this.wallTrimMat, 0, 1.1, -HD + 0.09));
+    g.add(mesh(G.trimLeft, this.wallTrimMat, -HW + 0.09, 1.1, 0));
+    g.add(mesh(G.rugEdge, this.rugEdgeMat, 0.2, 0.01, 0.25, false));
+    g.add(mesh(G.rug, this.rugMat, 0.2, 0.02, 0.25, false));
     const grid = [];
     for (const z of DESK_Z) for (const x of DESK_X) {
       const d = buildDesk(x, z);
@@ -301,7 +341,14 @@ export class RoomView {
     parent.add(g);
   }
 
-  setRoom(r, count) {
+  setRoom(r, count, theme) {
+    if (theme) {
+      this.floorMat.color.set(theme.floor);
+      this.rugMat.color.set(theme.rug);
+      this.rugEdgeMat.color.set(theme.trim);
+      this.wallMat.color.set(theme.wall);
+      this.wallTrimMat.color.set(theme.trim);
+    }
     this.firstKey = `${r.sessionId}/main`;
     this.plateEl.children[0].className = `dot ${r.status}`;
     this.plateEl.children[1].textContent = r.alias || r.name || r.sessionId.slice(0, 8);
@@ -357,6 +404,7 @@ export class RoomView {
   dispose() {
     this.plate.removeFromParent();
     for (const d of this.desks) d.lamp.dispose();
+    for (const m of [this.floorMat, this.rugMat, this.rugEdgeMat, this.wallMat, this.wallTrimMat]) m.dispose();
     this.linkGeo.dispose();
     this.linkMat.dispose();
     this.group.removeFromParent();
@@ -419,6 +467,74 @@ class PaperPlane {
   dispose() {
     this.mesh.removeFromParent();
     this.mat.dispose();
+  }
+}
+
+const WALL_H = 1, WALL_T = 0.18;
+const wallFrameMat = std('#b98f6c');
+const unitBox = new THREE.BoxGeometry(1, 1, 1);
+
+function buildDivider(color) {
+  const group = new THREE.Group();
+  const panelMat = new THREE.MeshStandardMaterial({ color, roughness: 0.75 });
+  const panel = new THREE.Mesh(unitBox, panelMat);
+  panel.position.y = WALL_H / 2;
+  panel.castShadow = panel.receiveShadow = true;
+  const rail = new THREE.Mesh(unitBox, wallFrameMat);
+  rail.position.y = WALL_H;
+  rail.castShadow = true;
+  const postA = new THREE.Mesh(unitBox, wallFrameMat);
+  const postB = new THREE.Mesh(unitBox, wallFrameMat);
+  postA.scale.set(0.12, WALL_H, WALL_T + 0.12);
+  postB.scale.copy(postA.scale);
+  postA.castShadow = postB.castShadow = true;
+  group.add(panel, rail, postA, postB);
+  return {
+    group, panel, rail, postA, postB, panelMat,
+    setColor(c) { panelMat.color.set(c); },
+    setWidth(w) {
+      panel.scale.set(w, WALL_H, WALL_T);
+      rail.scale.set(w + 0.1, 0.08, WALL_T + 0.12);
+      postA.position.x = -w / 2;
+      postB.position.x = w / 2;
+    },
+  };
+}
+
+// 相邻两个工作目录之间立一道低矮的玻璃隔断。
+export class GroupWalls {
+  constructor(parent) {
+    this.parent = parent;
+    this.items = new Map();
+  }
+
+  sync(blocks) {
+    const keep = new Set();
+    for (let i = 1; i < blocks.length; i++) {
+      const a = blocks[i - 1], b = blocks[i];
+      if (!a.slots.length || !b.slots.length) continue;
+      const pa = a.slots.map(roomSlot), pb = b.slots.map(roomSlot);
+      const zA = Math.max(...pa.map(p => p.z)), zB = Math.min(...pb.map(p => p.z));
+      const xs = [...pa, ...pb].map(p => p.x);
+      const x0 = Math.min(...xs), x1 = Math.max(...xs);
+      const key = `${a.key}|${b.key}`;
+      keep.add(key);
+      let wall = this.items.get(key);
+      if (!wall) {
+        wall = buildDivider(b.color || '#c79a72');
+        this.parent.add(wall.group);
+        this.items.set(key, wall);
+      }
+      wall.setColor(b.color || '#c79a72');
+      wall.group.position.set((x0 + x1) / 2, 0, (zA + zB) / 2);
+      wall.setWidth(x1 - x0 + W);
+    }
+    for (const [key, wall] of this.items) {
+      if (keep.has(key)) continue;
+      wall.group.removeFromParent();
+      wall.panelMat.dispose();
+      this.items.delete(key);
+    }
   }
 }
 

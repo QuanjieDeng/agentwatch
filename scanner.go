@@ -72,6 +72,7 @@ type rawLine struct {
 	Type        string `json:"type"`
 	IsSidechain bool   `json:"isSidechain"`
 	Timestamp   string `json:"timestamp"`
+	Cwd         string `json:"cwd"`
 	Message     struct {
 		ID      string          `json:"id"`
 		Content json.RawMessage `json:"content"`
@@ -98,6 +99,8 @@ type block struct {
 type agentLog struct {
 	tailer
 	agent Agent
+	// 日志行里的 cwd，用来判断这个会话属于哪个工作目录。
+	cwd string
 	// Claude Code writes one assistant message as several lines (one per
 	// content block) that repeat the same id and usage.
 	seenMsg map[string]bool
@@ -135,6 +138,10 @@ func (l *agentLog) apply(line []byte, sidechainOK bool) {
 		return
 	}
 	ts := t.UnixMilli()
+	// 会话中途 cd 会改变后续行的 cwd；房间归属取会话启动时的第一个 cwd。
+	if r.Cwd != "" && l.cwd == "" {
+		l.cwd = filepath.Clean(r.Cwd)
+	}
 	a := &l.agent
 	if a.StartedAt == 0 {
 		a.StartedAt = ts
@@ -313,13 +320,15 @@ type subMeta struct {
 }
 
 type Scanner struct {
-	Project, Home, AliasFile string
-	Stuck, Ghost             time.Duration
-	logs                     map[string]*agentLog // keyed by jsonl path
+	Home, AliasFile string
+	Stuck, Ghost    time.Duration
+	History         time.Duration
+	logs            map[string]*agentLog  // keyed by jsonl path
+	seen            map[string]sessionReg // 上次看到的注册表记录，会话退出后用来保持房间身份稳定
 }
 
-func NewScanner(project, home, aliasFile string, stuck, ghost time.Duration) *Scanner {
-	return &Scanner{Project: project, Home: home, AliasFile: aliasFile, Stuck: stuck, Ghost: ghost, logs: map[string]*agentLog{}}
+func NewScanner(home, aliasFile string, stuck, ghost, history time.Duration) *Scanner {
+	return &Scanner{Home: home, AliasFile: aliasFile, Stuck: stuck, Ghost: ghost, History: history, logs: map[string]*agentLog{}, seen: map[string]sessionReg{}}
 }
 
 // loadAliases re-reads the alias file on every scan so edits show up within a second.
@@ -341,7 +350,7 @@ func loadAliases(path string) map[string]string {
 	return out
 }
 
-func (s *Scanner) sessions() []sessionReg {
+func (s *Scanner) sessions() map[string]sessionReg {
 	files, _ := filepath.Glob(filepath.Join(s.Home, ".claude", "sessions", "*.json"))
 	byID := map[string]sessionReg{}
 	for _, f := range files {
@@ -350,7 +359,7 @@ func (s *Scanner) sessions() []sessionReg {
 			continue
 		}
 		var r sessionReg
-		if json.Unmarshal(data, &r) != nil || r.Cwd != s.Project || r.SessionID == "" {
+		if json.Unmarshal(data, &r) != nil || r.SessionID == "" {
 			continue
 		}
 		if !alive(r.PID) {
@@ -360,12 +369,7 @@ func (s *Scanner) sessions() []sessionReg {
 			byID[r.SessionID] = r
 		}
 	}
-	out := make([]sessionReg, 0, len(byID))
-	for _, r := range byID {
-		out = append(out, r)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].StartedAt < out[j].StartedAt })
-	return out
+	return byID
 }
 
 func alive(pid int) bool {
@@ -387,29 +391,81 @@ func (s *Scanner) log(path string, a Agent) *agentLog {
 
 func (s *Scanner) Scan(now time.Time) Snapshot {
 	nowMs := now.UnixMilli()
-	dir := projectLogDir(s.Home, s.Project)
 	aliases := loadAliases(s.AliasFile)
-	snap := Snapshot{Project: s.Project, GeneratedAt: nowMs, Rooms: []Room{}}
-	for _, reg := range s.sessions() {
-		name := reg.Name
-		if name == "" {
-			name = reg.SessionID[:min(8, len(reg.SessionID))]
+	snap := Snapshot{Owner: s.Home, GeneratedAt: nowMs, Rooms: []Room{}}
+	regs := s.sessions()
+
+	// 候选 = 最近改过的会话日志 + 注册表里的会话（进程还活着，日志可能还没落盘）。
+	// ponytail: 用 mtime 预筛历史窗口，避免每次扫描重放几百个旧会话；要更长历史就调 -history。
+	mainPaths := map[string]string{}
+	files, _ := filepath.Glob(filepath.Join(s.Home, ".claude", "projects", "*", "*.jsonl"))
+	for _, p := range files {
+		sid := strings.TrimSuffix(filepath.Base(p), ".jsonl")
+		if ifo, err := os.Stat(p); err == nil && now.Sub(ifo.ModTime()) <= s.History {
+			mainPaths[sid] = p
 		}
-		mainPath := filepath.Join(dir, reg.SessionID+".jsonl")
+	}
+	for _, reg := range regs {
+		if reg.Cwd == "" {
+			continue
+		}
+		if _, ok := mainPaths[reg.SessionID]; ok {
+			continue
+		}
+		mainPaths[reg.SessionID] = filepath.Join(projectLogDir(s.Home, filepath.Clean(reg.Cwd)), reg.SessionID+".jsonl")
+	}
+
+	sids := make([]string, 0, len(mainPaths))
+	for sid := range mainPaths {
+		sids = append(sids, sid)
+	}
+	sort.Strings(sids)
+
+	for _, sid := range sids {
+		mainPath := mainPaths[sid]
+		reg, live := regs[sid]
+		if live {
+			s.seen[sid] = reg
+		} else if prev, ok := s.seen[sid]; ok {
+			// 注册表文件随进程结束被删除：沿用最后一次记录，名字、分组、开始时间不跳变。
+			reg = prev
+		}
 		ml := s.log(mainPath, Agent{ID: "main", Type: "main", Description: "主 agent"})
 		ml.sync(mainPath, false)
+
+		name := reg.Name
+		if name == "" {
+			name = sid[:min(8, len(sid))]
+		}
+		status := "idle"
+		if live {
+			status = reg.Status
+		} else if reg.SessionID != "" {
+			status = "dead"
+		}
+		project := ml.cwd
+		if reg.Cwd != "" {
+			project = filepath.Clean(reg.Cwd)
+		}
+		if project == "" || project == "." {
+			continue // 还没解析出 cwd 的空日志，等下一轮
+		}
+		startedAt := ml.agent.StartedAt
+		if reg.StartedAt > 0 {
+			startedAt = reg.StartedAt
+		}
 		main := finalize(ml.agent, nowMs, s.Stuck)
 		// A main agent waiting on the user is idle, not stuck.
-		if reg.Status != "busy" && main.State == "stuck" {
+		if status != "busy" && main.State == "stuck" {
 			main.State = "idle"
 		}
-		alias := aliases[reg.SessionID]
+		alias := aliases[sid]
 		if alias == "" {
 			alias = aliases[name]
 		}
-		room := Room{SessionID: reg.SessionID, Name: name, Alias: alias, Provider: "claude", Status: reg.Status, StartedAt: reg.StartedAt, Main: main, Agents: []Agent{}, Messages: append([]Msg{}, ml.msgs...)}
+		room := Room{SessionID: sid, Name: name, Alias: alias, Project: project, Provider: "claude", Status: status, StartedAt: startedAt, Main: main, Agents: []Agent{}, Messages: append([]Msg{}, ml.msgs...)}
 
-		paths, _ := filepath.Glob(filepath.Join(dir, reg.SessionID, "subagents", "agent-*.jsonl"))
+		paths, _ := filepath.Glob(filepath.Join(filepath.Dir(mainPath), sid, "subagents", "agent-*.jsonl"))
 		for _, p := range paths {
 			id := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(p), "agent-"), ".jsonl")
 			var meta subMeta
@@ -432,7 +488,12 @@ func (s *Scanner) Scan(now time.Time) Snapshot {
 				room.Messages = append(room.Messages, Msg{From: id, To: "main", Ts: l.agent.LastEventAt})
 			}
 			room.Messages = append(room.Messages, l.msgs...)
-			room.Agents = append(room.Agents, finalize(l.agent, nowMs, s.Stuck))
+			a := finalize(l.agent, nowMs, s.Stuck)
+			// 会话已经结束，没写 finished 的子 agent 是被一起带走的，不算卡住。
+			if (!live || status == "dead") && a.State == "stuck" {
+				a.State = "idle"
+			}
+			room.Agents = append(room.Agents, a)
 		}
 		sort.Slice(room.Agents, func(i, j int) bool { return room.Agents[i].StartedAt < room.Agents[j].StartedAt })
 		sort.SliceStable(room.Messages, func(i, j int) bool { return room.Messages[i].Ts < room.Messages[j].Ts })
@@ -441,5 +502,11 @@ func (s *Scanner) Scan(now time.Time) Snapshot {
 		}
 		snap.Rooms = append(snap.Rooms, room)
 	}
+	for sid := range s.seen {
+		if _, ok := mainPaths[sid]; !ok {
+			delete(s.seen, sid)
+		}
+	}
+	sort.SliceStable(snap.Rooms, func(i, j int) bool { return snap.Rooms[i].StartedAt < snap.Rooms[j].StartedAt })
 	return snap
 }

@@ -22,8 +22,8 @@ func (m multiScanner) Scan(now time.Time) Snapshot {
 	out := Snapshot{GeneratedAt: now.UnixMilli(), Rooms: []Room{}}
 	for _, part := range m {
 		s := part.Scan(now)
-		if out.Project == "" {
-			out.Project = s.Project
+		if out.Owner == "" {
+			out.Owner = s.Owner
 		}
 		out.Rooms = append(out.Rooms, s.Rooms...)
 	}
@@ -32,26 +32,28 @@ func (m multiScanner) Scan(now time.Time) Snapshot {
 }
 
 func main() {
-	cwd, _ := os.Getwd()
-	project := flag.String("project", cwd, "project directory whose Claude Code and Codex sessions are watched")
 	port := flag.Int("port", 7788, "HTTP port")
 	demo := flag.Bool("demo", false, "serve synthetic data instead of scanning")
 	stuck := flag.Duration("stuck", 120*time.Second, "silence after which an unfinished agent is stuck")
 	ghost := flag.Duration("ghost", 180*time.Second, "how long a finished subagent stays visible")
 	aliasFile := flag.String("aliases", "aliases.json", "session alias map, keyed by sessionId or session name")
-	codexHistory := flag.Duration("codex-history", 24*time.Hour, "hide Codex sessions whose last event is older than this")
+	history := flag.Duration("history", 24*time.Hour, "hide sessions whose logs are older than this")
+	// 旧版插件缓存的启动脚本仍会传这两个 flag，保留成兼容参数，避免升级后起不来。
+	flag.String("project", "", "deprecated: ignored; every project under $HOME is watched")
+	codexHistory := flag.Duration("codex-history", 0, "deprecated: use -history")
 	flag.Parse()
+	if *codexHistory != 0 {
+		*history = *codexHistory
+	}
 
-	abs, err := filepath.Abs(*project)
+	home, err := os.UserHomeDir()
 	if err != nil {
 		log.Fatal(err)
 	}
-	abs = filepath.Clean(abs)
-	home, _ := os.UserHomeDir()
 
 	var src scanner = multiScanner{
-		NewScanner(abs, home, *aliasFile, *stuck, *ghost),
-		NewCodexScanner(abs, home, *aliasFile, *stuck, *codexHistory),
+		NewScanner(home, *aliasFile, *stuck, *ghost, *history),
+		NewCodexScanner(home, *aliasFile, *stuck, *history),
 	}
 	if *demo {
 		src = &Demo{start: time.Now(), stuck: *stuck}
@@ -70,7 +72,7 @@ func main() {
 		return snap
 	}
 	first := refresh()
-	fmt.Fprintf(os.Stderr, "agentwatch: project=%s logdir=%s sessions=%d demo=%v\n", abs, projectLogDir(home, abs), len(first.Rooms), *demo)
+	fmt.Fprintf(os.Stderr, "agentwatch: owner=%s sessions=%d demo=%v\n", first.Owner, len(first.Rooms), *demo)
 	go func() {
 		for range time.Tick(time.Second) {
 			refresh()

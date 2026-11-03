@@ -1,6 +1,6 @@
 # agentwatch 插件
 
-在 Claude Code 或 Codex 里一句话打开 agentwatch 看板：当前项目的 Claude Code 与 Codex 会话各占一间 3D 办公室，agent 的思考、工具调用与卡住状态实时可见。
+在 Claude Code 或 Codex 里一句话打开 agentwatch 看板：当前用户所有工作目录下的 Claude Code 与 Codex 会话各占一间 3D 办公室，按工作目录分组展示，agent 的思考、工具调用与卡住状态实时可见。
 
 ## 安装
 
@@ -22,7 +22,7 @@ codex plugin add agentwatch@agentwatch
 
 - skill `agentwatch`：两端共用，agent 运行启动脚本并把看板 URL 交给你。
 - Claude Code 命令 `/agentwatch`：调用同一个脚本。
-- `scripts/ensure-server.sh`：幂等启动脚本。端口上已有服务就直接复用；否则以调用时所在目录为项目，在后台 `go run` 起服务，日志写到工具目录的 `log/agentwatch.log`。
+- `scripts/ensure-server.sh`：幂等启动脚本。当前用户已有服务就直接复用；否则在后台 `go run` 起服务（扫描 `$HOME` 下全部工作目录），日志写到工具目录的 `log/agentwatch.log`。
 
 插件不带 hook，看板只在你要时启动。
 
@@ -33,7 +33,7 @@ codex plugin add agentwatch@agentwatch
 
 ## 环境变量
 
-- `AGENTWATCH_PORT`：指定端口。不设置时从 7788 起找：本项目已有服务就复用，被别的项目或别的服务占用（比如同一台机器上的同事）就顺延到 7789、7790…；设置后只用该端口，被占用直接报错。
+- `AGENTWATCH_PORT`：指定端口。不设置时从 7788 起找：当前用户已有服务就复用，被别的服务占用（比如同一台机器上同事的服务）就顺延到 7789、7790…；设置后只用该端口，被占用直接报错。
 - `AGENTWATCH_HOME`：agentwatch 源码目录。
 - `AGENTWATCH_LANG`：界面语言 `zh` / `en`，命令行第一个参数或插件选项优先。
 

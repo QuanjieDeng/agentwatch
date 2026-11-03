@@ -4,29 +4,29 @@
 
 ![agentwatch dashboard](screenshot.png)
 
-A live 3D dashboard of every Claude Code and Codex session in this project — one session per room. A Go standard-library scanner tails two log sources and pushes a snapshot over SSE every second; the frontend is a build-free Three.js cozy low-poly isometric office. Codex rooms are labeled `Codex` on the nameplate and in the sidebar.
+A live 3D dashboard of every Claude Code and Codex session under every working directory of the current user — one session per room. A Go standard-library scanner tails two log sources and pushes a snapshot over SSE every second; the frontend is a build-free Three.js cozy low-poly isometric office that groups rooms and the sidebar by working directory, with tabs for "All" or a single directory. Codex rooms are labeled `Codex` on the nameplate and in the sidebar.
 
-- Claude Code: the session registry at `~/.claude/sessions/*.json` plus session and sub-agent jsonl under `~/.claude/projects/<encoded-path>`.
-- Codex: sessions in `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` whose `cwd` matches this project; the room name comes from the thread name in `~/.codex/session_index.jsonl`. Codex draws the main agent only — no sub-agents, no paper planes. There is no process registry, so busy/idle is derived from the latest event time.
+- Claude Code: the session registry at `~/.claude/sessions/*.json` plus session and sub-agent jsonl under `~/.claude/projects/*/*.jsonl` modified within `-history`.
+- Codex: every session in `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`, grouped by `session_meta.cwd`; the room name comes from the thread name in `~/.codex/session_index.jsonl`. Codex draws the main agent only — no sub-agents, no paper planes. There is no process registry, so busy/idle is derived from the latest event time.
 
 ## Running
 
 ```bash
-# Start in the project directory you want to watch; opens the browser
+# Scans every working directory of the current user; opens the browser
 ~/tools/agentwatch/start.sh
 
 # Different port
 AGENTWATCH_PORT=7788 ~/tools/agentwatch/start.sh
 
-# Fake data (two rooms, cycling states) for frontend work
+# Fake data (three rooms, two working directories, cycling states) for frontend work
 cd ~/tools/agentwatch && go run . -demo -port 7799
 ```
 
-Flags: `-project` defaults to the current directory, `-port` to 7788, `-stuck` to 120s, `-ghost` to 180s, `-aliases` to `aliases.json`, and `-codex-history` to 24h (Codex sessions whose last event is older are hidden; raise it to see old sessions, e.g. `-codex-history 720h`).
+Flags: `-port` defaults to 7788, `-stuck` to 120s, `-ghost` to 180s, `-aliases` to `aliases.json`, and `-history` to 24h (sessions whose logs are older are hidden; raise it to see old sessions, e.g. `-history 720h`). The server always scans every working directory under `$HOME`.
 
 ## Install as a plugin
 
-This repo is also a plugin marketplace for both Claude Code and Codex; the plugin lives in `plugins/agentwatch/`. Once installed, tell the agent "open agentwatch" (or use `/agentwatch` in Claude Code) and it runs `plugins/agentwatch/scripts/ensure-server.sh` in the current project directory: it reuses a server already on the port, otherwise starts one in the background (log at `log/agentwatch.log`) and prints the URL.
+This repo is also a plugin marketplace for both Claude Code and Codex; the plugin lives in `plugins/agentwatch/`. Once installed, tell the agent "open agentwatch" (or use `/agentwatch` in Claude Code) and it runs `plugins/agentwatch/scripts/ensure-server.sh`: it reuses a server already running for the current user, otherwise starts one in the background (log at `log/agentwatch.log`) and prints the URL.
 
 ```bash
 # Claude Code: scope user (default) / project / local, UI language zh / en
@@ -86,6 +86,8 @@ Nameplates and the sidebar prefer the alias; the original session name stays in 
 
 ## Known limitations
 
+- The server has no authentication and listens on all interfaces (`:port`), so the dashboard exposes prompts, commands and file paths from every session under `$HOME`. Use it only on a trusted network, or restrict the port with a firewall.
+- A large `-history` produces a lot of rooms (720h is hundreds on this machine); the scene gets crowded and the first scan slows down. The default is 24h.
 - 8 desks per room; extras stand at the doorway and get no connection lines.
 - Labels have no collision handling and overlap when there are many agents.
 - When upgrading three.js, update both `web/vendor/three/build/three.module.js` and `three.core.js`; since r186 the former depends on the latter.

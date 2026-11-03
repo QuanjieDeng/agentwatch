@@ -3,7 +3,7 @@ description: 启动或复用本地 agentwatch 看板，返回浏览器地址
 allowed-tools: Bash(sh *)
 ---
 
-在当前项目目录执行下面的命令，不要先 cd。第一个参数是安装时选定的界面语言：
+直接执行下面的命令，不要先 cd（当前目录不影响扫描范围）。第一个参数是安装时选定的界面语言：
 
 ```sh
 sh "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-server.sh" "${user_config.language}"

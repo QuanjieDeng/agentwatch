@@ -17,19 +17,23 @@ type demoAgent struct {
 }
 
 var demoRooms = []struct {
-	id, name, alias, status, provider string
-	agents                            []demoAgent
+	id, name, alias, project, status, provider string
+	agents                                     []demoAgent
 }{
-	{"demo-0001-aaaa", "slg-server-3d", "3D 监控台", "busy", "claude", []demoAgent{
+	{"demo-0001-aaaa", "slg-server-3d", "3D 监控台", "/home/demo/slg/slg_server", "busy", "claude", []demoAgent{
 		{id: "a1", typ: "Explore", desc: "扫描 scenesvr 登录链路", tools: []string{"Grep", "Read", "Glob"}},
 		{id: "a2", typ: "pstack:poteto-agent", desc: "实现 agentwatch 后端", tools: []string{"Write", "Bash", "Edit"}, finishAt: 4},
 		{id: "a3", typ: "general-purpose", desc: "查线上日志", tools: []string{"Bash"}, stuck: true},
 	}},
-	{"demo-0002-bbbb", "corps-review", "公会复审", "idle", "codex", []demoAgent{
+	{"demo-0002-bbbb", "corps-review", "公会复审", "/home/demo/slg/corps_review", "idle", "codex", []demoAgent{
 		{id: "b1", typ: "Plan", desc: "设计公会投影方案", tools: []string{"Read", "Grep"}},
 		{id: "b2", typ: "agent-skills:code-reviewer", desc: "审查 corpssvr 改动", tools: []string{"Read", "Bash"}},
 		{id: "b3", typ: "Explore", desc: "定位护盾结算", tools: []string{"Grep", "Read"}},
 		{id: "b4", typ: "pstack:poteto-agent", desc: "补单测", tools: []string{"Edit", "Bash"}},
+	}},
+	{"demo-0003-cccc", "slg-server-hotfix", "线上热修", "/home/demo/slg/slg_server", "busy", "claude", []demoAgent{
+		{id: "c1", typ: "Explore", desc: "定位掉线原因", tools: []string{"Grep", "Read"}},
+		{id: "c2", typ: "general-purpose", desc: "核对回滚脚本", tools: []string{"Bash", "Read"}},
 	}},
 }
 
@@ -44,9 +48,9 @@ func (d *Demo) Scan(now time.Time) Snapshot {
 	step := 2500 * time.Millisecond
 	tick := int(now.Sub(d.start) / step)
 	ms := func(t time.Time) int64 { return t.UnixMilli() }
-	snap := Snapshot{Project: "/demo/project", GeneratedAt: ms(now), Rooms: []Room{}}
+	snap := Snapshot{Owner: "/home/demo", GeneratedAt: ms(now), Rooms: []Room{}}
 	for ri, r := range demoRooms {
-		room := Room{SessionID: r.id, Name: r.name, Alias: r.alias, Provider: r.provider, Status: r.status, StartedAt: ms(d.start) - int64(ri+1)*600_000, Agents: []Agent{}, Messages: []Msg{}}
+		room := Room{SessionID: r.id, Name: r.name, Alias: r.alias, Project: r.project, Provider: r.provider, Status: r.status, StartedAt: ms(d.start) - int64(ri+1)*600_000, Agents: []Agent{}, Messages: []Msg{}}
 		room.Main = d.agent(demoAgent{id: "main", typ: "main", desc: "主 agent", tools: []string{"Agent", "Read"}}, tick+ri, now, step)
 		room.Main.ParentID = ""
 		for i, da := range r.agents {

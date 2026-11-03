@@ -1,4 +1,4 @@
-import { createStage, RoomView, Flyers, roomSlot, roomsBox } from './scene.js';
+import { createStage, RoomView, Flyers, ProjectTags, GroupWalls, roomSlot, roomsBox, PER_ROW } from './scene.js';
 import { Actor, loadRobot, robotReady, shortName, actionText, fmtDur } from './agents.js';
 import { initLang, tr, locale, fmtNum, agentName } from './i18n.js';
 
@@ -11,20 +11,100 @@ const KINDS = new Set(['tool', 'result', 'thinking', 'text', 'user']);
 
 const stage = createStage($('stage'));
 const flyers = new Flyers(stage.scene);
+const projectTags = new ProjectTags(stage.scene);
+const groupWalls = new GroupWalls(stage.scene);
 const rooms = new Map(); // sessionId -> { view, actors: Map<key, Actor> }
 // Page-lifetime history: the server forgets finished agents after 180s, the sidebar must not.
 const history = new Map(); // key -> { key, sessionId, agent, gone }
 const roomMeta = new Map(); // sessionId -> { name, alias, provider, status, gone }
 let last = null;
+let tab = null; // null = 全部，否则是某个工作目录
 let firstApply = true;
 // Agents already present when the page opens appear in place; only later arrivals walk in from the door.
 let actorsBuilt = false;
 let layoutKey = '';
+let slotCount = 0;
 let selected = null;
 let clockSkew = 0;
 const errors = new Map();
 
 const now = () => Date.now() + clockSkew;
+
+// 场景里位置有限，取路径最后两段避免两个同名项目混在标签上。
+const projLabel = p => {
+  if (!p) return tr('unknownProject');
+  return p.split('/').filter(Boolean).slice(-2).join('/') || p;
+};
+
+// 协议按 startedAt 给房间顺序；场景里按工作目录重排，让同一项目的房间连成一片。
+function projectGroups(list) {
+  const groups = new Map();
+  for (const r of list) {
+    const p = r.project || '';
+    if (!groups.has(p)) groups.set(p, []);
+    groups.get(p).push(r);
+  }
+  return [...groups.entries()];
+}
+
+const projectKey = r => r.project || '';
+
+// 每个工作目录一套完整配色，房间的地面、地毯、墙面都跟着变。
+const THEMES = [
+  { floor: '#d9bfa1', rug: '#c98f86', wall: '#f3e3d2', trim: '#c79a72' },
+  { floor: '#9fcfae', rug: '#5f9e72', wall: '#e2f2e6', trim: '#79b58c' },
+  { floor: '#9fbde8', rug: '#5f86c9', wall: '#e3ecf9', trim: '#7ba3d9' },
+  { floor: '#e3a9c4', rug: '#c06f97', wall: '#f7e3ed', trim: '#cc8bad' },
+  { floor: '#e8d28a', rug: '#c9a63f', wall: '#faf1cf', trim: '#d4b65f' },
+  { floor: '#9fd3cf', rug: '#559e99', wall: '#e2f4f2', trim: '#76b8b3' },
+  { floor: '#d3b7e3', rug: '#9a6fc0', wall: '#f0e6f8', trim: '#b08fd1' },
+  { floor: '#e0b79a', rug: '#b5794f', wall: '#f8e9df', trim: '#c99672' },
+];
+const themeOf = new Map();
+
+function projectTheme(p) {
+  const key = p || '';
+  if (!themeOf.has(key)) themeOf.set(key, THEMES[themeOf.size % THEMES.length]);
+  return themeOf.get(key);
+}
+
+function projectList() {
+  const seen = new Set();
+  const out = [];
+  for (const r of last?.rooms ?? []) {
+    const p = projectKey(r);
+    if (!p || seen.has(p)) continue;
+    seen.add(p);
+    out.push(p);
+  }
+  return out;
+}
+
+function visibleRooms() {
+  if (!last) return [];
+  return tab === null ? last.rooms : last.rooms.filter(r => projectKey(r) === tab);
+}
+
+// 每个项目从新的一行开始，项目之间空出一行，避免不同工作目录的房间贴在一起。
+const GROUP_GAP_ROWS = 1;
+
+function layoutSlots(groups) {
+  const slotOf = new Map();
+  const blocks = [];
+  let next = 0;
+  for (const [key, list] of groups) {
+    next = Math.ceil(next / PER_ROW) * PER_ROW;
+    const slots = [];
+    for (const r of list) {
+      const at = next++;
+      slotOf.set(r.sessionId, at);
+      slots.push(at);
+    }
+    blocks.push({ key, slots, color: projectTheme(key).trim });
+    next += PER_ROW * GROUP_GAP_ROWS;
+  }
+  return { slotOf, blocks, count: Math.max(0, next - PER_ROW * GROUP_GAP_ROWS) };
+}
 
 function setError(slot, msg) {
   if (msg) errors.set(slot, msg); else errors.delete(slot);
@@ -42,30 +122,48 @@ function select(key) {
 function apply(snap) {
   if (!snap || !Array.isArray(snap.rooms)) throw new Error(tr('errSnapshot'));
   last = snap;
+  if (tab !== null && !snap.rooms.some(r => projectKey(r) === tab)) tab = null;
   if (snap.generatedAt) clockSkew = snap.generatedAt - Date.now();
-  $('proj').textContent = snap.project || tr('unknownProject');
+  $('proj').textContent = snap.owner || tr('allProjects');
 
   for (const h of history.values()) h.gone = true;
   for (const m of roomMeta.values()) m.gone = true;
 
+  const visible = visibleRooms();
+  const groups = projectGroups(visible);
+  const layout = layoutSlots(groups);
+  const slotOf = layout.slotOf;
+  slotCount = layout.count;
+
+  // 历史与 roomMeta 始终收全量快照，切页签时列表和详情不丢数据。
+  for (const r of snap.rooms) {
+    const list = [r.main, ...(r.agents ?? [])].filter(a => a && a.id);
+    roomMeta.set(r.sessionId, { name: r.name || r.sessionId.slice(0, 8), alias: r.alias || '', project: projectKey(r), provider: r.provider, status: r.status, gone: false });
+    for (const a of list) history.set(`${r.sessionId}/${a.id}`, { key: `${r.sessionId}/${a.id}`, sessionId: r.sessionId, agent: a, gone: false });
+  }
+
   const seen = new Set();
-  snap.rooms.forEach((r, i) => {
+  for (const r of visible) {
     seen.add(r.sessionId);
     const list = [r.main, ...(r.agents ?? [])].filter(a => a && a.id);
-    roomMeta.set(r.sessionId, { name: r.name || r.sessionId.slice(0, 8), alias: r.alias || '', provider: r.provider, status: r.status, gone: false });
-    for (const a of list) history.set(`${r.sessionId}/${a.id}`, { key: `${r.sessionId}/${a.id}`, sessionId: r.sessionId, agent: a, gone: false });
-
+    const at = slotOf.get(r.sessionId) ?? 0;
     let room = rooms.get(r.sessionId);
     if (!room) {
       room = { view: new RoomView(stage.scene, select), actors: new Map() };
-      room.view.group.position.copy(roomSlot(i));
+      room.view.group.position.copy(roomSlot(at));
       rooms.set(r.sessionId, room);
     }
-    room.view.target.copy(roomSlot(i));
-    room.view.setRoom(r, list.length);
+    room.view.target.copy(roomSlot(at));
+    room.view.setRoom(r, list.length, projectTheme(projectKey(r)));
     if (robotReady()) syncActors(room, r.sessionId, list);
-  });
+  }
   if (robotReady()) actorsBuilt = true;
+
+  projectTags.sync(groups.map(([p, list]) => {
+    const at = roomSlot(slotOf.get(list[0].sessionId) ?? 0);
+    return { key: p, text: `${projLabel(p)} · ${tr('roomCount', list.length)}`, color: projectTheme(p).rug, x: at.x, y: 3.6, z: at.z };
+  }));
+  groupWalls.sync(layout.blocks);
 
   for (const [sid, room] of rooms) {
     if (seen.has(sid)) continue;
@@ -76,9 +174,9 @@ function apply(snap) {
 
   flyMessages(snap);
 
-  const key = snap.rooms.map(r => r.sessionId).join('|');
+  const key = `${tab ?? ''}|${visible.map(r => r.sessionId).join('|')}`;
   if (key !== layoutKey) {
-    stage.frame(roomsBox(snap.rooms.length), firstApply);
+    stage.frame(roomsBox(slotCount), firstApply);
     layoutKey = key;
   }
   firstApply = false;
@@ -153,6 +251,7 @@ function totals() {
   let active = 0, stuck = 0, tokens = 0;
   for (const h of history.values()) {
     if (h.gone) continue;
+    if (tab !== null && (roomMeta.get(h.sessionId)?.project || '') !== tab) continue;
     const a = h.agent;
     if (a.state === 'stuck') stuck++;
     else if (a.state === 'tool' || a.state === 'processing' || a.state === 'thinking') active++;
@@ -180,35 +279,67 @@ function rowHtml(h, t) {
 }
 
 let eventsSig = '';
+let tabsSig = '';
+
+// 页签只在项目集合变化时重建，避免每秒简报把横向滚动位置重置。
+function renderTabs() {
+  if (!last) return;
+  const projects = projectList();
+  const sig = projects.join('|');
+  const el = $('tabs');
+  if (sig !== tabsSig) {
+    tabsSig = sig;
+    el.innerHTML = `<button type="button" class="tab" data-project="" title="${esc(tr('allProjects'))}">${esc(tr('tabAll'))}</button>` +
+      projects.map(p => {
+        const n = last.rooms.filter(r => projectKey(r) === p).length;
+        const t = projectTheme(p);
+        return `<button type="button" class="tab" data-project="${esc(p)}" title="${esc(p)}" style="--dot:${t.rug}">${esc(projLabel(p))}<span class="n">${n}</span></button>`;
+      }).join('');
+  }
+  for (const b of el.querySelectorAll('.tab')) {
+    const p = b.dataset.project || null;
+    b.classList.toggle('on', p === tab);
+  }
+}
 
 function renderSide(force) {
   const t = now();
   const { active, stuck, tokens } = totals();
-  $('st-rooms').textContent = fmtNum(last ? last.rooms.length : 0);
+  renderTabs();
+  $('st-rooms').textContent = fmtNum(visibleRooms().length);
   $('st-active').textContent = fmtNum(active);
   $('st-stuck').textContent = fmtNum(stuck);
   $('st-stuck').classList.toggle('hot', stuck > 0);
   $('st-tokens').textContent = fmtNum(tokens);
 
-  const groups = new Map();
+  const byProject = new Map();
   for (const h of history.values()) {
-    if (!groups.has(h.sessionId)) groups.set(h.sessionId, []);
-    groups.get(h.sessionId).push(h);
+    const p = roomMeta.get(h.sessionId)?.project || '';
+    if (!byProject.has(p)) byProject.set(p, new Map());
+    const sessions = byProject.get(p);
+    if (!sessions.has(h.sessionId)) sessions.set(h.sessionId, []);
+    sessions.get(h.sessionId).push(h);
   }
   let html = '';
-  for (const [sid, list] of groups) {
-    const m = roomMeta.get(sid);
-    const shown = m.alias || m.name;
-    const raw = m.alias && m.alias !== m.name ? `<span class="raw">${esc(m.name)}</span>` : '';
-    const pv = m.provider === 'codex' ? '<span class="raw">Codex</span>' : '';
-    html += `<div class="room-h"><span class="dot ${m.gone ? 'done' : m.status}"></span>${esc(shown)}${raw}${pv}${m.gone ? tr('closed') : ''}<span class="n">${tr('agentCount', list.length)}</span></div>`;
-    html += list.map(h => rowHtml(h, t)).join('');
+  for (const [p, sessions] of byProject) {
+    if (tab !== null && p !== tab) continue;
+    // 选中单个目录时，页签已经说明了是哪个目录，不再重复整行路径。
+    if (tab === null) html += `<div class="proj-h" title="${esc(p)}"><span class="pj">${esc(p || tr('unknownProject'))}</span><span class="n">${tr('roomCount', sessions.size)}</span></div>`;
+    for (const [sid, list] of sessions) {
+      const m = roomMeta.get(sid);
+      const shown = m.alias || m.name;
+      const raw = m.alias && m.alias !== m.name ? `<span class="raw">${esc(m.name)}</span>` : '';
+      const pv = m.provider === 'codex' ? '<span class="raw">Codex</span>' : '';
+      html += `<div class="room-h"><span class="dot ${m.gone ? 'done' : m.status}"></span>${esc(shown)}${raw}${pv}${m.gone ? tr('closed') : ''}<span class="n">${tr('agentCount', list.length)}</span></div>`;
+      html += list.map(h => rowHtml(h, t)).join('');
+    }
   }
   $('list').innerHTML = html || `<div class="empty">${tr('noSessions')}</div>`;
 
   const h = selected && history.get(selected);
-  $('detail').hidden = !h;
-  if (!h) return;
+  const inTab = h && (tab === null || (roomMeta.get(h.sessionId)?.project || '') === tab);
+  $('detail').hidden = !inTab;
+  if (!inTab) return;
   const a = h.agent;
   const tk = a.tokens ?? {};
   $('detail-head').innerHTML = `<div class="d">${esc(agentName(a))}</div>
@@ -233,7 +364,15 @@ function renderSide(force) {
 }
 
 $('list').addEventListener('click', e => select(e.target.closest('.row')?.dataset.key));
-$('reset').addEventListener('click', () => stage.frame(roomsBox(last ? last.rooms.length : 1)));
+$('tabs').addEventListener('click', e => {
+  const b = e.target.closest('.tab');
+  if (!b) return;
+  const p = b.dataset.project || null;
+  if (p === tab) return;
+  tab = p;
+  if (last) apply(last);
+});
+$('reset').addEventListener('click', () => stage.frame(roomsBox(slotCount || 1)));
 setInterval(() => renderSide(false), 1000);
 
 function safeApply(snap, slot) {

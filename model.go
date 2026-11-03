@@ -1,7 +1,7 @@
 package main
 
 type Snapshot struct {
-	Project     string `json:"project"`
+	Owner       string `json:"owner"` // 被扫描的用户根目录（$HOME），启动脚本据此复用同一用户的服务
 	GeneratedAt int64  `json:"generatedAt"`
 	Rooms       []Room `json:"rooms"`
 }
@@ -10,6 +10,7 @@ type Room struct {
 	SessionID string  `json:"sessionId"`
 	Name      string  `json:"name"`
 	Alias     string  `json:"alias"`    // 用户在 aliases.json 里起的别名，空则前端回落到 Name
+	Project   string  `json:"project"`  // 会话的工作目录（cwd），前端按它分组
 	Provider  string  `json:"provider"` // claude | codex
 	Status    string  `json:"status"`   // busy | idle | dead
 	StartedAt int64   `json:"startedAt"`

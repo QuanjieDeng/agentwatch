@@ -2,7 +2,7 @@
 # 启动或复用本地 agentwatch 服务，成功时打印看板 URL：先本机 localhost，再局域网 IP。
 set -eu
 
-project=$(pwd -P)
+owner=$HOME
 query=
 requested=${AGENTWATCH_PORT:-}
 
@@ -16,12 +16,12 @@ esac
 # localhost 指向那台机器自己，所以再给出本机 IP 直连地址。
 lan_ip=$(hostname -I 2>/dev/null | awk '{print $1}') || lan_ip=
 
-# 端口状态：mine=本项目已有服务，free=可以启动，busy=别的项目或别的服务占着。
+# 端口状态：mine=当前用户已有服务，free=可以启动，busy=别的服务占着。
 port_state() {
 	body=$(curl -fsS --max-time 1 "http://localhost:$1/api/snapshot" 2>/dev/null) || body=
 	if [ -n "$body" ]; then
-		watched=$(printf '%s' "$body" | sed -n 's/.*"project":"\([^"]*\)".*/\1/p')
-		if [ "$watched" = "$project" ]; then
+		watched=$(printf '%s' "$body" | sed -n 's/.*"owner":"\([^"]*\)".*/\1/p')
+		if [ "$watched" = "$owner" ]; then
 			echo mine
 		else
 			echo busy
@@ -33,7 +33,7 @@ port_state() {
 	if [ $? -eq 7 ]; then echo free; else echo busy; fi
 }
 
-# 显式指定端口就只用它；否则从 7788 起找，同一台机器多个用户/项目各占一个。
+# 显式指定端口就只用它；否则从 7788 起找，同一台机器多个用户各占一个。
 if [ -n "$requested" ]; then
 	candidates=$requested
 else
@@ -41,7 +41,7 @@ else
 fi
 
 port=
-# 先找已经为本项目跑着的服务，避免同一项目起两个。
+# 先找已经为当前用户跑着的服务，避免同一个用户起两个。
 for p in $candidates; do
 	if [ "$(port_state "$p")" = mine ]; then
 		port=$p
@@ -60,7 +60,7 @@ if [ -z "$port" ]; then
 fi
 if [ -z "$port" ]; then
 	if [ -n "$requested" ]; then
-		echo "agentwatch：端口 $requested 已被别的项目或服务占用，请用 AGENTWATCH_PORT 换一个端口" >&2
+		echo "agentwatch：端口 $requested 已被别的服务占用，请用 AGENTWATCH_PORT 换一个端口" >&2
 	else
 		echo "agentwatch：端口 7788-7795 都被占用，请用 AGENTWATCH_PORT 换一个端口" >&2
 	fi
@@ -117,7 +117,7 @@ fi
 mkdir -p "$home/log"
 logfile=$home/log/agentwatch.log
 cd "$home"
-nohup go run . -project "$project" -port "$port" >"$logfile" 2>&1 &
+nohup go run . -port "$port" >"$logfile" 2>&1 &
 
 # 首次 go run 要编译，给足 15 秒。
 i=0

@@ -4,29 +4,29 @@
 
 ![agentwatch 看板](screenshot.png)
 
-本工程所有 Claude Code 与 Codex 会话的实时 3D 看板，一个会话一个房间。Go 标准库扫描两处日志，每秒经 SSE 推送快照；前端是无构建的 Three.js 温馨低多边形等距办公室，Codex 房间的名牌与侧栏会标出 `Codex`。
+当前用户所有工作目录下 Claude Code 与 Codex 会话的实时 3D 看板，一个会话一个房间。Go 标准库扫描两处日志，每秒经 SSE 推送快照；前端是无构建的 Three.js 温馨低多边形等距办公室，按工作目录把房间与侧栏分组，顶部页签可切到「全部」或单个工作目录，Codex 房间的名牌与侧栏会标出 `Codex`。
 
-- Claude Code：`~/.claude/sessions/*.json` 注册表与 `~/.claude/projects/<编码路径>` 下的会话、子 agent jsonl。
-- Codex：`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` 中 `cwd` 等于本项目的会话，房间名取 `~/.codex/session_index.jsonl` 的线程名。Codex 只画主 agent，没有子 agent 与纸飞机；没有进程注册表，按最近事件时间判断忙闲。
+- Claude Code：`~/.claude/sessions/*.json` 注册表，加上 `~/.claude/projects/*/*.jsonl` 中最近 `-history` 内改动过的会话与子 agent 日志。
+- Codex：`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`，房间归到 `session_meta.cwd` 对应的工作目录，房间名取 `~/.codex/session_index.jsonl` 的线程名。Codex 只画主 agent，没有子 agent 与纸飞机；没有进程注册表，按最近事件时间判断忙闲。
 
 ## 运行
 
 ```bash
-# 在要观察的项目目录下启动，自动打开浏览器
+# 启动后扫描当前用户全部工作目录，自动打开浏览器
 ~/tools/agentwatch/start.sh
 
 # 换端口
 AGENTWATCH_PORT=7788 ~/tools/agentwatch/start.sh
 
-# 假数据（两个房间、状态循环），用于调前端
+# 假数据（三个房间、两个工作目录、状态循环），用于调前端
 cd ~/tools/agentwatch && go run . -demo -port 7799
 ```
 
-参数：`-project` 默认当前目录，`-port` 默认 7788，`-stuck` 默认 120s，`-ghost` 默认 180s，`-aliases` 默认 `aliases.json`，`-codex-history` 默认 24h（最后事件早于它的 Codex 会话不显示，看老会话就调大，如 `-codex-history 720h`）。
+参数：`-port` 默认 7788，`-stuck` 默认 120s，`-ghost` 默认 180s，`-aliases` 默认 `aliases.json`，`-history` 默认 24h（日志早于它的会话不显示，看老会话就调大，如 `-history 720h`）。服务固定扫描 `$HOME` 下的全部工作目录。
 
 ## 作为插件安装
 
-本仓库同时是 Claude Code 与 Codex 的插件 marketplace，插件在 `plugins/agentwatch/`。装好后对 agent 说「打开 agentwatch」，或在 Claude Code 里用 `/agentwatch`，它会在当前项目目录运行 `plugins/agentwatch/scripts/ensure-server.sh`：端口上已有服务就复用，否则后台起服务（日志 `log/agentwatch.log`），最后给出 URL。
+本仓库同时是 Claude Code 与 Codex 的插件 marketplace，插件在 `plugins/agentwatch/`。装好后对 agent 说「打开 agentwatch」，或在 Claude Code 里用 `/agentwatch`，它会运行 `plugins/agentwatch/scripts/ensure-server.sh`：当前用户已有服务就复用，否则后台起服务（日志 `log/agentwatch.log`），最后给出 URL。
 
 ```bash
 # Claude Code：安装范围 user（默认）/ project / local，界面语言 zh / en
@@ -86,6 +86,8 @@ agent 之间发消息时会飞过一架纸飞机：主 agent 派活给子 agent�
 
 ## 已知限制
 
+- 服务无鉴权且监听所有网卡（`:port`），看板会暴露 `$HOME` 下所有会话的提问、命令与文件路径。只在可信网络使用，或自己用防火墙限制端口。
+- `-history` 调得很大时房间会非常多（720h 在本机是数百个），场景会拥挤，首屏扫描也会变慢；默认 24h。
 - 每个房间 8 个工位，超出部分站在门口且不画连线。
 - 标签没有碰撞处理，agent 很多时会重叠。
 - 角色模型升级 three.js 时要同时更新 `web/vendor/three/build/three.module.js` 与 `three.core.js`，r186 起前者依赖后者。
