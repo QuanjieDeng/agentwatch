@@ -153,7 +153,7 @@ func TestScanEndToEnd(t *testing.T) {
 
 	aliasFile := filepath.Join(home, "aliases.json")
 	must(t, os.WriteFile(aliasFile, []byte(`{"`+sid+`":"按会话ID","11112222":"按名字"}`), 0o644))
-	s := NewScanner(home, aliasFile, 120*time.Second, 180*time.Second, 24*time.Hour)
+	s := NewScanner(home, aliasFile, 120*time.Second, 180*time.Second, 24*time.Hour, true)
 	snap := s.Scan(time.UnixMilli(ms("2026-10-29T13:00:10Z")))
 	if len(snap.Owner) == 0 || snap.Owner != home {
 		t.Errorf("owner = %q, want %q", snap.Owner, home)
@@ -209,6 +209,33 @@ func TestScanEndToEnd(t *testing.T) {
 	}
 }
 
+func TestScanHidesDeadAndHistoryByDefault(t *testing.T) {
+	home := t.TempDir()
+	must(t, os.MkdirAll(filepath.Join(home, ".claude", "sessions"), 0o755))
+	now := time.UnixMilli(ms("2026-10-29T13:00:10Z"))
+	logOf := func(dir, sid, cwd string) {
+		d := filepath.Join(home, ".claude", "projects", dir)
+		must(t, os.MkdirAll(d, 0o755))
+		line := `{"type":"user","isSidechain":false,"timestamp":"2026-10-29T13:00:01Z","cwd":"` + cwd + `","message":{"content":"hi"}}`
+		must(t, os.WriteFile(filepath.Join(d, sid+".jsonl"), []byte(line+"\n"), 0o644))
+	}
+	live, dead, hist := "11111111-0000-0000-0000-000000000000", "22222222-0000-0000-0000-000000000000", "33333333-0000-0000-0000-000000000000"
+	logOf("-work-live", live, "/work/live")
+	logOf("-work-dead", dead, "/work/dead")
+	logOf("-work-hist", hist, "/work/hist")
+	must(t, os.WriteFile(filepath.Join(home, ".claude", "sessions", "1.json"), []byte(`{"pid":`+strconv.Itoa(os.Getpid())+`,"sessionId":"`+live+`","cwd":"/work/live","status":"busy","startedAt":1}`), 0o644))
+	must(t, os.WriteFile(filepath.Join(home, ".claude", "sessions", "2.json"), []byte(`{"pid":0,"sessionId":"`+dead+`","cwd":"/work/dead","status":"idle","startedAt":2}`), 0o644))
+
+	liveOnly := NewScanner(home, "", 120*time.Second, 180*time.Second, 24*time.Hour, false)
+	if snap := liveOnly.Scan(now); len(snap.Rooms) != 1 || snap.Rooms[0].SessionID != live {
+		t.Fatalf("live-only rooms = %+v, want just the live session", snap.Rooms)
+	}
+	all := NewScanner(home, "", 120*time.Second, 180*time.Second, 24*time.Hour, true)
+	if n := len(all.Scan(now).Rooms); n != 3 {
+		t.Fatalf("-all rooms = %d, want 3", n)
+	}
+}
+
 func roomByID(s Snapshot, id string) *Room {
 	for i := range s.Rooms {
 		if s.Rooms[i].SessionID == id {
@@ -237,7 +264,7 @@ func TestMessages(t *testing.T) {
 	must(t, os.WriteFile(filepath.Join(sub, "agent-abc.jsonl"), []byte(lineUser+"\n"+lineText+"\n"), 0o644))
 	must(t, os.WriteFile(filepath.Join(sub, "agent-abc.meta.json"), []byte(`{"agentType":"Explore","description":"d","finished":true,"toolUseId":"tu1"}`), 0o644))
 
-	s := NewScanner(home, filepath.Join(home, "aliases.json"), 120*time.Second, 180*time.Second, 24*time.Hour)
+	s := NewScanner(home, filepath.Join(home, "aliases.json"), 120*time.Second, 180*time.Second, 24*time.Hour, false)
 	snap := s.Scan(time.UnixMilli(ms("2026-10-29T13:00:10Z")))
 	got := []string{}
 	for _, m := range snap.Rooms[0].Messages {

@@ -94,4 +94,6 @@ type Event struct {
 
 ## Claude 房间来源
 
-Claude Code 的房间来自注册表 `~/.claude/sessions/*.json` 里的会话，加上 `~/.claude/projects/*/*.jsonl` 中最近 `-history` 内改动过的会话日志（没有注册表记录的历史会话按日志行里的 `cwd` 归组）。没有注册表记录的房间 `status` 为 `idle`。
+默认只输出注册表 `~/.claude/sessions/*.json` 里进程还活着（`/proc/<pid>` 存在）的会话；进程已结束的房间不会出现，`status` 也不会是 `dead`。
+
+加 `-all` 时才额外回放 `~/.claude/projects/*/*.jsonl` 中最近 `-history` 内改动过的会话日志（没有注册表记录的历史会话按日志行里的 `cwd` 归组）。此时注册表里 PID 已死的房间 `status` 为 `dead`，纯历史房间为 `idle`。

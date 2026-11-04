@@ -4,9 +4,9 @@
 
 ![agentwatch 看板](screenshot.png)
 
-当前用户所有工作目录下 Claude Code 与 Codex 会话的实时 3D 看板，一个会话一个房间。Go 标准库扫描两处日志，每秒经 SSE 推送快照；前端是无构建的 Three.js 温馨低多边形等距办公室，按工作目录把房间与侧栏分组，顶部页签可切到「全部」或单个工作目录，Codex 房间的名牌与侧栏会标出 `Codex`。
+当前用户所有工作目录下 Claude Code 与 Codex 会话的实时 3D 看板，一个会话一个房间。Go 标准库扫描两处日志，每秒经 SSE 推送快照；前端是无构建的 Three.js 温馨低多边形等距办公室，按工作目录把房间与侧栏分组，顶部页签可切到「全部」或单个工作目录，点房间名牌上的 ⛶ 可只显示该房间并拉近（再点一次或按 Esc 退出），Codex 房间的名牌与侧栏会标出 `Codex`。
 
-- Claude Code：`~/.claude/sessions/*.json` 注册表，加上 `~/.claude/projects/*/*.jsonl` 中最近 `-history` 内改动过的会话与子 agent 日志。
+- Claude Code：`~/.claude/sessions/*.json` 注册表；默认只显示注册表里进程还活着的会话。加 `-all` 才额外回放 `~/.claude/projects/*/*.jsonl` 中最近 `-history` 内改动过的会话与子 agent 日志。
 - Codex：`~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`，房间归到 `session_meta.cwd` 对应的工作目录，房间名取 `~/.codex/session_index.jsonl` 的线程名。Codex 只画主 agent，没有子 agent 与纸飞机；没有进程注册表，按最近事件时间判断忙闲。
 
 ## 运行
@@ -22,7 +22,7 @@ AGENTWATCH_PORT=7788 ~/tools/agentwatch/start.sh
 cd ~/tools/agentwatch && go run . -demo -port 7799
 ```
 
-参数：`-port` 默认 7788，`-stuck` 默认 120s，`-ghost` 默认 180s，`-aliases` 默认 `aliases.json`，`-history` 默认 24h（日志早于它的会话不显示，看老会话就调大，如 `-history 720h`）。服务固定扫描 `$HOME` 下的全部工作目录。
+参数：`-port` 默认 7788，`-stuck` 默认 120s，`-ghost` 默认 180s，`-aliases` 默认 `aliases.json`，`-history` 默认 24h（`-all` 时日志早于它的会话不显示，看老会话就调大，如 `-all -history 720h`）；`-all` 默认关闭且只影响 Claude，只显示有活进程的会话，已结束与纯历史的房间不显示。服务固定扫描 `$HOME` 下的全部工作目录。
 
 ## 作为插件安装
 
@@ -87,7 +87,7 @@ agent 之间发消息时会飞过一架纸飞机：主 agent 派活给子 agent�
 ## 已知限制
 
 - 服务无鉴权且监听所有网卡（`:port`），看板会暴露 `$HOME` 下所有会话的提问、命令与文件路径。只在可信网络使用，或自己用防火墙限制端口。
-- `-history` 调得很大时房间会非常多（720h 在本机是数百个），场景会拥挤，首屏扫描也会变慢；默认 24h。
+- `-all` 加很大的 `-history` 时房间会非常多（720h 在本机是数百个），场景会拥挤，首屏扫描也会变慢；默认只显示活会话，`-history` 为 24h。
 - 每个房间 8 个工位，超出部分站在门口且不画连线。
 - 标签没有碰撞处理，agent 很多时会重叠。
 - 角色模型升级 three.js 时要同时更新 `web/vendor/three/build/three.module.js` 与 `three.core.js`，r186 起前者依赖后者。

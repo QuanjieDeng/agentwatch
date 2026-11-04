@@ -4,9 +4,9 @@
 
 ![agentwatch dashboard](screenshot.png)
 
-A live 3D dashboard of every Claude Code and Codex session under every working directory of the current user — one session per room. A Go standard-library scanner tails two log sources and pushes a snapshot over SSE every second; the frontend is a build-free Three.js cozy low-poly isometric office that groups rooms and the sidebar by working directory, with tabs for "All" or a single directory. Codex rooms are labeled `Codex` on the nameplate and in the sidebar.
+A live 3D dashboard of every Claude Code and Codex session under every working directory of the current user — one session per room. A Go standard-library scanner tails two log sources and pushes a snapshot over SSE every second; the frontend is a build-free Three.js cozy low-poly isometric office that groups rooms and the sidebar by working directory, with tabs for "All" or a single directory. Hover a room nameplate and press ⛶ to show only that room, zoomed in (press again or Esc to exit). Codex rooms are labeled `Codex` on the nameplate and in the sidebar.
 
-- Claude Code: the session registry at `~/.claude/sessions/*.json` plus session and sub-agent jsonl under `~/.claude/projects/*/*.jsonl` modified within `-history`.
+- Claude Code: the session registry at `~/.claude/sessions/*.json`; only sessions whose process is still alive are shown by default. `-all` additionally replays session and sub-agent jsonl under `~/.claude/projects/*/*.jsonl` modified within `-history`.
 - Codex: every session in `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`, grouped by `session_meta.cwd`; the room name comes from the thread name in `~/.codex/session_index.jsonl`. Codex draws the main agent only — no sub-agents, no paper planes. There is no process registry, so busy/idle is derived from the latest event time.
 
 ## Running
@@ -22,7 +22,7 @@ AGENTWATCH_PORT=7788 ~/tools/agentwatch/start.sh
 cd ~/tools/agentwatch && go run . -demo -port 7799
 ```
 
-Flags: `-port` defaults to 7788, `-stuck` to 120s, `-ghost` to 180s, `-aliases` to `aliases.json`, and `-history` to 24h (sessions whose logs are older are hidden; raise it to see old sessions, e.g. `-history 720h`). The server always scans every working directory under `$HOME`.
+Flags: `-port` defaults to 7788, `-stuck` to 120s, `-ghost` to 180s, `-aliases` to `aliases.json`, and `-history` to 24h (with `-all`, sessions whose logs are older are hidden; raise it to see old sessions, e.g. `-all -history 720h`). `-all` is off by default, so only sessions with a live process are shown and finished/history-only rooms stay hidden. The server always scans every working directory under `$HOME`.
 
 ## Install as a plugin
 
@@ -87,7 +87,7 @@ Nameplates and the sidebar prefer the alias; the original session name stays in 
 ## Known limitations
 
 - The server has no authentication and listens on all interfaces (`:port`), so the dashboard exposes prompts, commands and file paths from every session under `$HOME`. Use it only on a trusted network, or restrict the port with a firewall.
-- A large `-history` produces a lot of rooms (720h is hundreds on this machine); the scene gets crowded and the first scan slows down. The default is 24h.
+- `-all` with a large `-history` produces a lot of rooms (720h is hundreds on this machine); the scene gets crowded and the first scan slows down. By default only live sessions are shown, with `-history` at 24h.
 - 8 desks per room; extras stand at the doorway and get no connection lines.
 - Labels have no collision handling and overlap when there are many agents.
 - When upgrading three.js, update both `web/vendor/three/build/three.module.js` and `three.core.js`; since r186 the former depends on the latter.

@@ -37,7 +37,8 @@ func main() {
 	stuck := flag.Duration("stuck", 120*time.Second, "silence after which an unfinished agent is stuck")
 	ghost := flag.Duration("ghost", 180*time.Second, "how long a finished subagent stays visible")
 	aliasFile := flag.String("aliases", "aliases.json", "session alias map, keyed by sessionId or session name")
-	history := flag.Duration("history", 24*time.Hour, "hide sessions whose logs are older than this")
+	history := flag.Duration("history", 24*time.Hour, "hide sessions whose logs are older than this (Claude needs -all)")
+	all := flag.Bool("all", false, "also show finished and historical Claude sessions (default: only live ones)")
 	// 旧版插件缓存的启动脚本仍会传这两个 flag，保留成兼容参数，避免升级后起不来。
 	flag.String("project", "", "deprecated: ignored; every project under $HOME is watched")
 	codexHistory := flag.Duration("codex-history", 0, "deprecated: use -history")
@@ -52,7 +53,7 @@ func main() {
 	}
 
 	var src scanner = multiScanner{
-		NewScanner(home, *aliasFile, *stuck, *ghost, *history),
+		NewScanner(home, *aliasFile, *stuck, *ghost, *history, *all),
 		NewCodexScanner(home, *aliasFile, *stuck, *history),
 	}
 	if *demo {

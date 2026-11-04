@@ -323,12 +323,13 @@ type Scanner struct {
 	Home, AliasFile string
 	Stuck, Ghost    time.Duration
 	History         time.Duration
+	All             bool              // 连已结束/纯历史会话一起显示；默认只显示注册表里进程还活着的会话
 	logs            map[string]*agentLog  // keyed by jsonl path
 	seen            map[string]sessionReg // 上次看到的注册表记录，会话退出后用来保持房间身份稳定
 }
 
-func NewScanner(home, aliasFile string, stuck, ghost, history time.Duration) *Scanner {
-	return &Scanner{Home: home, AliasFile: aliasFile, Stuck: stuck, Ghost: ghost, History: history, logs: map[string]*agentLog{}, seen: map[string]sessionReg{}}
+func NewScanner(home, aliasFile string, stuck, ghost, history time.Duration, all bool) *Scanner {
+	return &Scanner{Home: home, AliasFile: aliasFile, Stuck: stuck, Ghost: ghost, History: history, All: all, logs: map[string]*agentLog{}, seen: map[string]sessionReg{}}
 }
 
 // loadAliases re-reads the alias file on every scan so edits show up within a second.
@@ -424,6 +425,11 @@ func (s *Scanner) Scan(now time.Time) Snapshot {
 	for _, sid := range sids {
 		mainPath := mainPaths[sid]
 		reg, live := regs[sid]
+		// 默认只显示有活进程的会话：历史日志和进程已死的注册表记录都不出声。
+		// ponytail: 一个 pid 一个注册表文件，进程没了 Claude Code 会删掉；-all 才回放 -history 窗口内的旧房间。
+		if !s.All && (!live || reg.Status == "dead") {
+			continue
+		}
 		if live {
 			s.seen[sid] = reg
 		} else if prev, ok := s.seen[sid]; ok {

@@ -19,6 +19,7 @@ const history = new Map(); // key -> { key, sessionId, agent, gone }
 const roomMeta = new Map(); // sessionId -> { name, alias, provider, status, gone }
 let last = null;
 let tab = null; // null = 全部，否则是某个工作目录
+let focus = null; // 非空 = 只显示这一个房间并拉近镜头
 let firstApply = true;
 // Agents already present when the page opens appear in place; only later arrivals walk in from the door.
 let actorsBuilt = false;
@@ -82,7 +83,14 @@ function projectList() {
 
 function visibleRooms() {
   if (!last) return [];
+  if (focus) return last.rooms.filter(r => r.sessionId === focus);
   return tab === null ? last.rooms : last.rooms.filter(r => projectKey(r) === tab);
+}
+
+// 聚焦一个房间：场景只留它一个，布局把它挪到首格，镜头随之拉近。
+function toggleFocus(sid) {
+  focus = focus === sid ? null : sid;
+  if (last) apply(last);
 }
 
 // 每个项目从新的一行开始，项目之间空出一行，避免不同工作目录的房间贴在一起。
@@ -122,6 +130,7 @@ function select(key) {
 function apply(snap) {
   if (!snap || !Array.isArray(snap.rooms)) throw new Error(tr('errSnapshot'));
   last = snap;
+  if (focus && !snap.rooms.some(r => r.sessionId === focus)) focus = null;
   if (tab !== null && !snap.rooms.some(r => projectKey(r) === tab)) tab = null;
   if (snap.generatedAt) clockSkew = snap.generatedAt - Date.now();
   $('proj').textContent = snap.owner || tr('allProjects');
@@ -149,12 +158,12 @@ function apply(snap) {
     const at = slotOf.get(r.sessionId) ?? 0;
     let room = rooms.get(r.sessionId);
     if (!room) {
-      room = { view: new RoomView(stage.scene, select), actors: new Map() };
+      room = { view: new RoomView(stage.scene, select, toggleFocus), actors: new Map() };
       room.view.group.position.copy(roomSlot(at));
       rooms.set(r.sessionId, room);
     }
     room.view.target.copy(roomSlot(at));
-    room.view.setRoom(r, list.length, projectTheme(projectKey(r)));
+    room.view.setRoom(r, list.length, projectTheme(projectKey(r)), focus === r.sessionId);
     if (robotReady()) syncActors(room, r.sessionId, list);
   }
   if (robotReady()) actorsBuilt = true;
@@ -251,6 +260,7 @@ function totals() {
   let active = 0, stuck = 0, tokens = 0;
   for (const h of history.values()) {
     if (h.gone) continue;
+    if (focus && h.sessionId !== focus) continue;
     if (tab !== null && (roomMeta.get(h.sessionId)?.project || '') !== tab) continue;
     const a = h.agent;
     if (a.state === 'stuck') stuck++;
@@ -323,9 +333,11 @@ function renderSide(force) {
   let html = '';
   for (const [p, sessions] of byProject) {
     if (tab !== null && p !== tab) continue;
+    const rows = focus ? [...sessions].filter(([sid]) => sid === focus) : [...sessions];
+    if (!rows.length) continue;
     // 选中单个目录时，页签已经说明了是哪个目录，不再重复整行路径。
-    if (tab === null) html += `<div class="proj-h" title="${esc(p)}"><span class="pj">${esc(p || tr('unknownProject'))}</span><span class="n">${tr('roomCount', sessions.size)}</span></div>`;
-    for (const [sid, list] of sessions) {
+    if (tab === null) html += `<div class="proj-h" title="${esc(p)}"><span class="pj">${esc(p || tr('unknownProject'))}</span><span class="n">${tr('roomCount', rows.length)}</span></div>`;
+    for (const [sid, list] of rows) {
       const m = roomMeta.get(sid);
       const shown = m.alias || m.name;
       const raw = m.alias && m.alias !== m.name ? `<span class="raw">${esc(m.name)}</span>` : '';
@@ -368,9 +380,13 @@ $('tabs').addEventListener('click', e => {
   const b = e.target.closest('.tab');
   if (!b) return;
   const p = b.dataset.project || null;
-  if (p === tab) return;
+  if (p === tab && !focus) return;
+  focus = null;
   tab = p;
   if (last) apply(last);
+});
+addEventListener('keydown', e => {
+  if (e.key === 'Escape' && focus) toggleFocus(focus);
 });
 $('reset').addEventListener('click', () => stage.frame(roomsBox(slotCount || 1)));
 setInterval(() => renderSide(false), 1000);

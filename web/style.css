@@ -65,6 +65,17 @@ body { display: flex; }
   cursor: pointer;
 }
 .nameplate .n { color: #8a7a6c; font-weight: 500; }
+.nameplate .focus {
+  margin: -2px -6px -2px 0;
+  padding: 1px 5px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #8a7a6c;
+  font: 600 13px/1.2 ui-monospace, Menlo, Consolas, monospace;
+  cursor: pointer;
+}
+.nameplate .focus:hover, .nameplate .focus.on { background: rgba(185, 71, 63, .12); color: #b9473f; }
 
 .proj-tag {
   padding: 3px 10px 3px 8px;

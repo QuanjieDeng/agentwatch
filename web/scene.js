@@ -284,7 +284,7 @@ function buildFloorLamp(x, z) {
 }
 
 export class RoomView {
-  constructor(parent, onPick) {
+  constructor(parent, onPick, onFocus) {
     this.group = new THREE.Group();
     this.target = new THREE.Vector3();
     this.door = new THREE.Vector3(HW - 0.9, 0, HD - 0.3);
@@ -327,6 +327,11 @@ export class RoomView {
     el.className = 'nameplate';
     el.innerHTML = '<span class="dot"></span><span class="nm"></span><span class="n"></span>';
     el.addEventListener('pointerdown', e => { e.stopPropagation(); onPick(this.firstKey); });
+    this.focusEl = document.createElement('button');
+    this.focusEl.type = 'button';
+    this.focusEl.className = 'focus';
+    this.focusEl.addEventListener('pointerdown', e => { e.stopPropagation(); onFocus(this.sid); });
+    el.appendChild(this.focusEl);
     this.plateEl = el;
     this.plate = new CSS2DObject(el);
     this.plate.position.set(0, 0.1, HD + 0.35);
@@ -341,7 +346,7 @@ export class RoomView {
     parent.add(g);
   }
 
-  setRoom(r, count, theme) {
+  setRoom(r, count, theme, focused = false) {
     if (theme) {
       this.floorMat.color.set(theme.floor);
       this.rugMat.color.set(theme.rug);
@@ -349,7 +354,11 @@ export class RoomView {
       this.wallMat.color.set(theme.wall);
       this.wallTrimMat.color.set(theme.trim);
     }
+    this.sid = r.sessionId;
     this.firstKey = `${r.sessionId}/main`;
+    this.focusEl.textContent = focused ? '✕' : '⛶';
+    this.focusEl.title = focused ? tr('unfocusRoom') : tr('focusRoom');
+    this.focusEl.classList.toggle('on', focused);
     this.plateEl.children[0].className = `dot ${r.status}`;
     this.plateEl.children[1].textContent = r.alias || r.name || r.sessionId.slice(0, 8);
     this.plateEl.children[1].title = r.alias && r.name ? r.name : '';
