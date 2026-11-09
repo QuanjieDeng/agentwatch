@@ -94,3 +94,7 @@ agent 之间发消息时会飞过一架纸飞机：主 agent 派活给子 agent�
 - session 注册表 `status` 若停在 `busy`，主 agent 静默超过 `-stuck` 会显示卡住。
 - Codex 只有主 agent：日志里还没有可对上的子 agent 元数据，所以没有工位和纸飞机。
 - Codex 没有进程注册表，单次工具调用超过 `-stuck`（默认 120 秒）没有新事件时会显示 idle，而不是 stuck。
+
+## License
+
+MIT，见 [LICENSE](LICENSE)。

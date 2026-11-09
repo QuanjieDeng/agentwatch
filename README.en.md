@@ -94,3 +94,7 @@ Nameplates and the sidebar prefer the alias; the original session name stays in 
 - If a session registry `status` is stuck at `busy`, the main agent goes silent past `-stuck` and shows as stuck.
 - Codex has a main agent only: the logs carry no matching sub-agent metadata, so there are no desks or paper planes.
 - Codex has no process registry, so a single tool call that runs longer than `-stuck` (120s default) with no new events shows as idle rather than stuck.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
